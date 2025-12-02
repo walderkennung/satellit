@@ -1,0 +1,42 @@
+[workspace]
+authors = ["Mose Schmiedel <mose@schmiednet.de>"]
+channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+name = "satellit"
+platforms = ["osx-arm64", "linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+ipykernel = ">=7.1.0,<8"
+tqdm = ">=4.67.1,<5"
+requests = ">=2.32.5,<3"
+pycocotools = ">=2.0.10,<3"
+matplotlib = ">=3.10.8,<4"
+onnxruntime = ">=1.22.0,<2"
+onnx = ">=1.19.1,<2"
+
+
+[pypi-dependencies]
+segment-anything = { git = "https://github.com/facebookresearch/segment-anything.git" }
+opencv-python = ">=4.11.0.86, <5"
+
+[environments]
+cuda = ["cuda"]
+metal = ["metal"]
+
+[feature.metal]
+platforms = ["osx-arm64"]
+pypi-dependencies = {torch = ">=2.0.0", torchvision = "*"}
+
+[feature.cuda]
+dependencies = {cuda = ">=12.0"}
+pypi-dependencies = {torch = ">=2.0.0", torchvision = "*"}
+platforms = ["linux-64"]
+activation = {scripts = ["cuda_activation.sh"]}
+system-requirements = {cuda = "12"}
+# Channels concatenate using a priority instead of overwrite, so the default channels are still used.
+# Using the priority the concatenation is controlled, default is 0, the default channels are used last.
+# Highest priority comes first.
+channels = ["nvidia", {channel = "pytorch", priority = -1}] # Results in:  ["nvidia", "conda-forge", "pytorch"] when the default is `conda-forge`
+tasks = { warmup = "python warmup.py" }
