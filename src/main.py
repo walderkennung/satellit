@@ -1,5 +1,4 @@
 import os
-from multiprocessing.context import Process
 
 import cv2
 import matplotlib.pyplot as plt
@@ -7,18 +6,23 @@ import numpy as np
 import torch
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 
-# # Patch torch.as_tensor for MPS compatibility
-# _original_as_tensor = torch.as_tensor
+# Force float32 default (must be before loading model)
+torch.set_default_dtype(torch.float32)
+
+# Also patch as_tensor for SAM's internal calls
+_original_as_tensor = torch.as_tensor
 
 
-# def _patched_as_tensor(data, dtype=None, device=None):
-#     if device is not None and "mps" in str(device):
-#         if dtype == torch.float64 or dtype is None:
-#             dtype = torch.float32
-#     return _original_as_tensor(data, dtype=dtype, device=device)
+def _patched_as_tensor(data, dtype=None, device=None):
+    if device is not None and "mps" in str(device):
+        if dtype == torch.float64:
+            dtype = torch.float32
+        elif dtype is None and hasattr(data, "dtype") and data.dtype == "float64":
+            dtype = torch.float32
+    return _original_as_tensor(data, dtype=dtype, device=device)
 
 
-# torch.as_tensor = _patched_as_tensor
+torch.as_tensor = _patched_as_tensor
 
 
 def show_mask(mask, ax, random_color=False):
@@ -77,16 +81,22 @@ def show_anns(anns, ax):
 
 
 def process_tiles(
-    image, sam, output_dir="tiles_output", max_tiles=10, tile_size=1024, overlap=256
+    image,
+    sam,
+    output_dir="tiles_output",
+    initial_offset=[0, 0],
+    max_tiles=10,
+    tile_size=1024,
+    overlap=256,
 ):
     """Process large image in tiles and save each tile result."""
     os.makedirs(output_dir, exist_ok=True)
     h, w = image.shape[:2]
-    mask_gen = SamAutomaticMaskGenerator(sam)
+    mask_gen = SamAutomaticMaskGenerator(sam, points_per_side=128)
 
     tile_idx = 0
-    for y in range(2 * tile_size, h, tile_size - overlap):
-        for x in range(3 * tile_size, w, tile_size - overlap):
+    for y in range(initial_offset[1] * tile_size, h, tile_size - overlap):
+        for x in range(initial_offset[0] * tile_size, w, tile_size - overlap):
             if tile_idx < max_tiles:
                 x_end = min(x + tile_size, w)
                 y_end = min(y + tile_size, h)
@@ -120,8 +130,7 @@ image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # SAM expects RGB
 
 # Initialize PyTorch
 torch.set_default_dtype(torch.float32)
-# device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-device = torch.device("cpu")
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 print("Loading model...")
 sam = sam_model_registry["vit_h"](checkpoint="models/sam/sam_vit_h_4b8939.pth")
@@ -129,5 +138,11 @@ sam.to(device=device)
 
 print("Generating masks...")
 process_tiles(
-    image, sam, output_dir="output/tiles", max_tiles=2, tile_size=1024, overlap=256
+    image,
+    sam,
+    output_dir="output/tiles",
+    initial_offset=[2, 2],
+    max_tiles=2,
+    tile_size=1024,
+    overlap=256,
 )

@@ -2,6 +2,8 @@
 .pixi/*
 !.pixi/config.toml
 
+.DS_Store
+
 # downloaded models
 models/
 output/
