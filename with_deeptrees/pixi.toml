@@ -1,0 +1,16 @@
+[workspace]
+authors = ["Mose Schmiedel <mose.schmiedel@stud.htwk-leipzig.de>"]
+channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+name = "with_deeptrees"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.12.*"
+pyproj = ">=3.7.2,<4"
+
+[pypi-dependencies]
+rasterio = "==1.4a3"
+deeptrees = ">=1.8.2, <2"
