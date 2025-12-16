@@ -316,5 +316,5 @@ image = Image.open(image_path).convert("RGB")
 
 
 print("Generating masks...")
-masks, _, _ = sam3.predict(image)
-sam3.overlay_masks(image, masks).show()
+results = sam3.predict(image, text="tree crowns")
+sam3.overlay_masks(image, results["masks"]).show()

@@ -5,14 +5,14 @@ from PIL import Image
 from transformers import Sam3Model, Sam3Processor
 
 
-def predict(image: Image.Image):
+def predict(image: Image.Image, text: str):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    processor = Sam3Processor.from_pretrained("facebook/sam3").to(device)
-    model = Sam3Model.from_pretrained("facebook/sam3")
+    model = Sam3Model.from_pretrained("facebook/sam3").to(device)
+    processor = Sam3Processor.from_pretrained("facebook/sam3")
 
     # Segment using text prompt
-    inputs = processor(images=image, text="tree crowns", return_tensors="pt").to(device)
+    inputs = processor(images=image, text=text, return_tensors="pt").to(device)
 
     with torch.no_grad():
         outputs = model(**inputs)
