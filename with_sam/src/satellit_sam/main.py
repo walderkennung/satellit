@@ -163,6 +163,23 @@ def reconstruct_from_tiles(
     return reconstructed
 
 
+def _get_cached_tiles(output_dir: str) -> set[tuple[int, int]]:
+    """Get set of (x, y) positions for already processed tiles."""
+    cached = set()
+    if not os.path.exists(output_dir):
+        return cached
+
+    for filename in os.listdir(output_dir):
+        if filename.startswith("tile_") and filename.endswith(".png"):
+            # Parse position from filename: tile_0000_x0_y0.png
+            parts = filename.replace(".png", "").split("_")
+            x = int(parts[2][1:])  # Remove 'x' prefix
+            y = int(parts[3][1:])  # Remove 'y' prefix
+            cached.add((x, y))
+
+    return cached
+
+
 def process_tiles(
     image,
     sam,
@@ -171,8 +188,9 @@ def process_tiles(
     max_tiles=None,
     tile_size=1024,
     overlap=256,
+    use_cache=True,
 ):
-    """Process large image in tileswith SAM (Segment Anything Model) and save each tile result.
+    """Process large image in tiles with SAM (Segment Anything Model) and save each tile result.
 
     Args:
         image: Input image as a numpy array (RGB format).
@@ -182,6 +200,7 @@ def process_tiles(
         max_tiles: Maximum number of tiles to process (None for all tiles).
         tile_size: Size of each square tile in pixels.
         overlap: Overlap between adjacent tiles in pixels for seamless reconstruction.
+        use_cache: If True, skip tiles that already exist in output_dir.
 
     Returns:
         Dictionary containing reconstruction information:
@@ -191,10 +210,16 @@ def process_tiles(
             - output_dir: Directory where tiles were saved
             - total_prediction_time: Total time spent on SAM predictions
             - tiles_processed: Number of tiles processed
+            - tiles_skipped: Number of tiles skipped (cached)
     """
     os.makedirs(output_dir, exist_ok=True)
     h, w = image.shape[:2]
     mask_gen = SamAutomaticMaskGenerator(sam, points_per_side=128)
+
+    # Get cached tiles if caching is enabled
+    cached_tiles = _get_cached_tiles(output_dir) if use_cache else set()
+    if cached_tiles:
+        print(f"Found {len(cached_tiles)} cached tiles in {output_dir}")
 
     # Calculate all tile positions
     tile_positions = []
@@ -204,10 +229,18 @@ def process_tiles(
                 tile_positions.append((x, y))
 
     total_prediction_time = 0.0
-    tile_idx = 0
+    tiles_processed = 0
+    tiles_skipped = 0
 
     with tqdm(total=len(tile_positions), desc="Processing tiles", unit="tile") as pbar:
-        for x, y in tile_positions:
+        for tile_idx, (x, y) in enumerate(tile_positions):
+            # Check if tile is already cached
+            if (x, y) in cached_tiles:
+                tiles_skipped += 1
+                pbar.set_postfix(status="cached", skipped=tiles_skipped)
+                pbar.update(1)
+                continue
+
             x_end = min(x + tile_size, w)
             y_end = min(y + tile_size, h)
             tile = image[y:y_end, x:x_end]
@@ -230,20 +263,24 @@ def process_tiles(
             )
             plt.close(fig)  # Free memory!
 
+            tiles_processed += 1
             pbar.set_postfix(
                 masks=len(masks),
                 time=f"{elapsed_time:.2f}s",
-                avg=f"{total_prediction_time / (tile_idx + 1):.2f}s",
+                avg=f"{total_prediction_time / tiles_processed:.2f}s",
+                skipped=tiles_skipped,
             )
             pbar.update(1)
-            tile_idx += 1
 
             # Clear masks from memory
             del masks
 
     print(f"\nTotal prediction time: {total_prediction_time:.2f}s")
-    if tile_idx > 0:
-        print(f"Average time per tile: {total_prediction_time / tile_idx:.2f}s")
+    print(
+        f"Tiles processed: {tiles_processed}, Tiles skipped (cached): {tiles_skipped}"
+    )
+    if tiles_processed > 0:
+        print(f"Average time per tile: {total_prediction_time / tiles_processed:.2f}s")
 
     # Return info needed for reconstruction
     return {
@@ -252,7 +289,8 @@ def process_tiles(
         "overlap": overlap,
         "output_dir": output_dir,
         "total_prediction_time": total_prediction_time,
-        "tiles_processed": tile_idx,
+        "tiles_processed": tiles_processed,
+        "tiles_skipped": tiles_skipped,
     }
 
 
