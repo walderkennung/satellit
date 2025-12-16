@@ -107,7 +107,7 @@ def process_tiles(
 
 
 print("Reading image...")
-image = cv2.imread("data/orthophoto_wgs84_utm33n_agg200mm.tif")
+image = cv2.imread("../data/orthophoto_wgs84_utm33n_agg200mm.tif")
 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # SAM expects RGB
 
 pytorch_instance = pytorch.init()
