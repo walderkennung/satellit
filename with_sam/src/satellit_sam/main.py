@@ -4,10 +4,9 @@ import time
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import sam3
+from PIL import Image
 from tqdm import tqdm
-from ultralytics.models.sam import SAM3SemanticPredictor
-
-import satellit_sam.pytorch as pytorch
 
 
 def show_mask(mask, ax, random_color=False):
@@ -309,34 +308,12 @@ def process_tiles(
     }
 
 
-print("Reading image...")
-image = cv2.imread("../data/orthophoto_wgs84_utm33n_agg200mm.tif")
-image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # SAM expects RGB
+print("Loading image...")
+# Load image
+image_path = "../data/orthophoto_wgs84_utm33n_agg200mm.tif"
+image = Image.open(image_path).convert("RGB")
 
-pytorch_instance = pytorch.init()
-
-print("Loading model...")
 
 print("Generating masks...")
-tile_info = process_tiles(
-    image,
-    output_dir="output/tiles",
-    initial_offset=[0, 0],
-    tile_size=1024,
-    overlap=256,
-    prompt="tree crowns",
-)
-
-print("Reconstructing image from tiles...")
-reconstructed = reconstruct_from_tiles(
-    original_shape=tile_info["original_shape"],
-    tiles_dir=tile_info["output_dir"],
-    tile_size=tile_info["tile_size"],
-    overlap=tile_info["overlap"],
-)
-
-# Save reconstructed image
-cv2.imwrite(
-    "output/reconstructed.png", cv2.cvtColor(reconstructed, cv2.COLOR_RGBA2BGRA)
-)
-print("Saved reconstructed image to output/reconstructed.png")
+masks, _, _ = sam3.predict(image)
+sam3.overlay_masks(image, masks).show()
