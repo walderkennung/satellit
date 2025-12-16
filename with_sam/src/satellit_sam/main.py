@@ -3,26 +3,8 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
+import satellit_sam.pytorch as pytorch
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
-
-# Force float32 default (must be before loading model)
-torch.set_default_dtype(torch.float32)
-
-# Also patch as_tensor for SAM's internal calls
-_original_as_tensor = torch.as_tensor
-
-
-def _patched_as_tensor(data, dtype=None, device=None):
-    if device is not None and "mps" in str(device):
-        if dtype == torch.float64:
-            dtype = torch.float32
-        elif dtype is None and hasattr(data, "dtype") and data.dtype == "float64":
-            dtype = torch.float32
-    return _original_as_tensor(data, dtype=dtype, device=device)
-
-
-torch.as_tensor = _patched_as_tensor
 
 
 def show_mask(mask, ax, random_color=False):
@@ -128,13 +110,11 @@ print("Reading image...")
 image = cv2.imread("data/orthophoto_wgs84_utm33n_agg200mm.tif")
 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # SAM expects RGB
 
-# Initialize PyTorch
-torch.set_default_dtype(torch.float32)
-device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+pytorch_instance = pytorch.init()
 
 print("Loading model...")
 sam = sam_model_registry["vit_h"](checkpoint="models/sam/sam_vit_h_4b8939.pth")
-sam.to(device=device)
+sam.to(device=pytorch_instance.device)
 
 print("Generating masks...")
 process_tiles(
