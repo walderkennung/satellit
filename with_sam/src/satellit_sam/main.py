@@ -4,9 +4,10 @@ import time
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import satellit_sam.pytorch as pytorch
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 from tqdm import tqdm
+
+import satellit_sam.pytorch as pytorch
 
 
 def show_mask(mask, ax, random_color=False):
@@ -167,7 +168,7 @@ def process_tiles(
     sam,
     output_dir="tiles_output",
     initial_offset=[0, 0],
-    max_tiles=10,
+    max_tiles=None,
     tile_size=1024,
     overlap=256,
 ):
@@ -180,7 +181,7 @@ def process_tiles(
     tile_positions = []
     for y in range(initial_offset[1] * tile_size, h, tile_size - overlap):
         for x in range(initial_offset[0] * tile_size, w, tile_size - overlap):
-            if len(tile_positions) < max_tiles:
+            if max_tiles is None or len(tile_positions) < max_tiles:
                 tile_positions.append((x, y))
 
     total_prediction_time = 0.0
