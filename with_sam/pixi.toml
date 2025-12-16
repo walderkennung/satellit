@@ -24,7 +24,7 @@ torchvision = ">=0.24.1,<0.25"
 
 [pypi-dependencies]
 python-base = { git = "https://github.com/walderkennung/python-base.git" }
-segment_anything = { git = "https://github.com/facebookresearch/segment_anything.git" }
+segment_anything = { git = "https://github.com/facebookresearch/segment-anything.git" }
 
 [environments]
 cuda = ["cuda"]
