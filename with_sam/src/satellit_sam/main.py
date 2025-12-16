@@ -172,7 +172,26 @@ def process_tiles(
     tile_size=1024,
     overlap=256,
 ):
-    """Process large image in tiles and save each tile result."""
+    """Process large image in tileswith SAM (Segment Anything Model) and save each tile result.
+
+    Args:
+        image: Input image as a numpy array (RGB format).
+        sam: Loaded SAM model instance.
+        output_dir: Directory to save processed tile images.
+        initial_offset: Starting offset [x, y] in tile units for processing.
+        max_tiles: Maximum number of tiles to process (None for all tiles).
+        tile_size: Size of each square tile in pixels.
+        overlap: Overlap between adjacent tiles in pixels for seamless reconstruction.
+
+    Returns:
+        Dictionary containing reconstruction information:
+            - original_shape: Shape of the input image
+            - tile_size: Size of tiles used
+            - overlap: Overlap between tiles
+            - output_dir: Directory where tiles were saved
+            - total_prediction_time: Total time spent on SAM predictions
+            - tiles_processed: Number of tiles processed
+    """
     os.makedirs(output_dir, exist_ok=True)
     h, w = image.shape[:2]
     mask_gen = SamAutomaticMaskGenerator(sam, points_per_side=128)
