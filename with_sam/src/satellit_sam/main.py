@@ -62,6 +62,104 @@ def show_anns(anns, ax):
         ax.imshow(np.dstack((img, m * 0.35)))
 
 
+def reconstruct_from_tiles(
+    original_shape: tuple[int, int, int],
+    tiles_dir: str = "tiles_output",
+    tile_size: int = 1024,
+    overlap: int = 256,
+) -> np.ndarray:
+    """
+    Reconstruct the full image from processed tiles.
+
+    Args:
+        original_shape: Shape of the original image (height, width, channels).
+        tiles_dir: Directory containing the processed tile images.
+        tile_size: Size of each tile.
+        overlap: Overlap between adjacent tiles.
+
+    Returns:
+        Reconstructed image as a numpy array.
+    """
+    h, w, c = original_shape
+    reconstructed = np.zeros((h, w, 4), dtype=np.float32)  # RGBA for blending
+    weight_map = np.zeros((h, w), dtype=np.float32)
+
+    # Create a weight mask for blending (higher weight in center, lower at edges)
+    blend_mask = np.ones((tile_size, tile_size), dtype=np.float32)
+    if overlap > 0:
+        # Create linear ramp for overlap regions
+        ramp = np.linspace(0, 1, overlap)
+        # Apply ramp to edges
+        blend_mask[:overlap, :] *= ramp[:, np.newaxis]  # top edge
+        blend_mask[-overlap:, :] *= ramp[::-1, np.newaxis]  # bottom edge
+        blend_mask[:, :overlap] *= ramp[np.newaxis, :]  # left edge
+        blend_mask[:, -overlap:] *= ramp[::-1][np.newaxis, :]  # right edge
+
+    # Find all tile files and extract their positions
+    tile_files = []
+    for filename in os.listdir(tiles_dir):
+        if filename.startswith("tile_") and filename.endswith(".png"):
+            # Parse position from filename: tile_0000_x0_y0.png
+            parts = filename.replace(".png", "").split("_")
+            x = int(parts[2][1:])  # Remove 'x' prefix
+            y = int(parts[3][1:])  # Remove 'y' prefix
+            tile_files.append((filename, x, y))
+
+    # Sort by position for consistent processing
+    tile_files.sort(key=lambda t: (t[2], t[1]))
+
+    for filename, x, y in tile_files:
+        tile_path = os.path.join(tiles_dir, filename)
+        tile = cv2.imread(tile_path, cv2.IMREAD_UNCHANGED)
+
+        if tile is None:
+            print(f"Warning: Could not read {tile_path}")
+            continue
+
+        # Convert BGR(A) to RGB(A)
+        if tile.shape[2] == 3:
+            tile = cv2.cvtColor(tile, cv2.COLOR_BGR2RGB)
+            # Add alpha channel
+            tile = np.dstack([tile, np.full(tile.shape[:2], 255, dtype=np.uint8)])
+        else:
+            tile = cv2.cvtColor(tile, cv2.COLOR_BGRA2RGBA)
+
+        tile = tile.astype(np.float32) / 255.0
+
+        # Calculate actual tile dimensions (may be smaller at edges)
+        tile_h, tile_w = tile.shape[:2]
+        x_end = min(x + tile_w, w)
+        y_end = min(y + tile_h, h)
+        actual_w = x_end - x
+        actual_h = y_end - y
+
+        # Get the appropriate portion of the blend mask
+        current_blend = blend_mask[:actual_h, :actual_w]
+
+        # Resize tile if needed (tiles from matplotlib may have different resolution)
+        if tile_h != actual_h or tile_w != actual_w:
+            tile = cv2.resize(
+                tile, (actual_w, actual_h), interpolation=cv2.INTER_LINEAR
+            )
+
+        # Apply weighted blending
+        for c_idx in range(4):
+            reconstructed[y:y_end, x:x_end, c_idx] += tile[:, :, c_idx] * current_blend
+        weight_map[y:y_end, x:x_end] += current_blend
+
+        print(f"Added tile at ({x}, {y})")
+
+    # Normalize by weight map to complete the blending
+    weight_map = np.maximum(weight_map, 1e-6)  # Avoid division by zero
+    for c_idx in range(4):
+        reconstructed[:, :, c_idx] /= weight_map
+
+    # Convert back to uint8
+    reconstructed = (reconstructed * 255).astype(np.uint8)
+
+    return reconstructed
+
+
 def process_tiles(
     image,
     sam,
@@ -105,6 +203,14 @@ def process_tiles(
                 # Clear masks from memory
                 del masks
 
+    # Return info needed for reconstruction
+    return {
+        "original_shape": image.shape,
+        "tile_size": tile_size,
+        "overlap": overlap,
+        "output_dir": output_dir,
+    }
+
 
 print("Reading image...")
 image = cv2.imread("../data/orthophoto_wgs84_utm33n_agg200mm.tif")
@@ -117,7 +223,7 @@ sam = sam_model_registry["vit_h"](checkpoint="models/sam/sam_vit_h_4b8939.pth")
 sam.to(device=pytorch_instance.device)
 
 print("Generating masks...")
-process_tiles(
+tile_info = process_tiles(
     image,
     sam,
     output_dir="output/tiles",
@@ -126,3 +232,17 @@ process_tiles(
     tile_size=1024,
     overlap=256,
 )
+
+print("Reconstructing image from tiles...")
+reconstructed = reconstruct_from_tiles(
+    original_shape=tile_info["original_shape"],
+    tiles_dir=tile_info["output_dir"],
+    tile_size=tile_info["tile_size"],
+    overlap=tile_info["overlap"],
+)
+
+# Save reconstructed image
+cv2.imwrite(
+    "output/reconstructed.png", cv2.cvtColor(reconstructed, cv2.COLOR_RGBA2BGRA)
+)
+print("Saved reconstructed image to output/reconstructed.png")
