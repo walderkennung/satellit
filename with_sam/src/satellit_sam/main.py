@@ -4,9 +4,10 @@ import time
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import sam3
 from PIL import Image
 from tqdm import tqdm
+
+import satellit_sam.sam3 as sam3
 
 
 def show_mask(mask, ax, random_color=False):
