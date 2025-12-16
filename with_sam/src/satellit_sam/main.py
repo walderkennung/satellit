@@ -324,6 +324,7 @@ tile_info = process_tiles(
     initial_offset=[0, 0],
     tile_size=1024,
     overlap=256,
+    prompt="tree crowns",
 )
 
 print("Reconstructing image from tiles...")
