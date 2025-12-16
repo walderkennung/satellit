@@ -129,28 +129,26 @@ def reconstruct_from_tiles(
 
         tile = tile.astype(np.float32) / 255.0
 
-        # Calculate actual tile dimensions (may be smaller at edges)
+        # Calculate target tile dimensions (may be smaller at edges of image)
+        x_end = min(x + tile_size, w)
+        y_end = min(y + tile_size, h)
+        target_w = x_end - x
+        target_h = y_end - y
+
+        # Get the appropriate portion of the blend mask for target dimensions
+        current_blend = blend_mask[:target_h, :target_w]
+
+        # Resize tile to match target dimensions (tiles from matplotlib may have different resolution due to DPI)
         tile_h, tile_w = tile.shape[:2]
-        x_end = min(x + tile_w, w)
-        y_end = min(y + tile_h, h)
-        actual_w = x_end - x
-        actual_h = y_end - y
-
-        # Get the appropriate portion of the blend mask
-        current_blend = blend_mask[:actual_h, :actual_w]
-
-        # Resize tile if needed (tiles from matplotlib may have different resolution)
-        if tile_h != actual_h or tile_w != actual_w:
+        if tile_h != target_h or tile_w != target_w:
             tile = cv2.resize(
-                tile, (actual_w, actual_h), interpolation=cv2.INTER_LINEAR
+                tile, (target_w, target_h), interpolation=cv2.INTER_LINEAR
             )
 
         # Apply weighted blending
         for c_idx in range(4):
             reconstructed[y:y_end, x:x_end, c_idx] += tile[:, :, c_idx] * current_blend
         weight_map[y:y_end, x:x_end] += current_blend
-
-        print(f"Added tile at ({x}, {y})")
 
     # Normalize by weight map to complete the blending
     weight_map = np.maximum(weight_map, 1e-6)  # Avoid division by zero
