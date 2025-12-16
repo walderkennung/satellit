@@ -8,8 +8,8 @@ from transformers import Sam3Model, Sam3Processor
 def predict(image: Image.Image):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    model = Sam3Model.from_pretrained("facebook/sam3").to(device)
-    processor = Sam3Processor.from_pretrained("facebook/sam3")
+    processor = Sam3Processor.from_pretrained("facebook/sam3").to(device)
+    model = Sam3Model.from_pretrained("facebook/sam3")
 
     # Segment using text prompt
     inputs = processor(images=image, text="tree crowns", return_tensors="pt").to(device)
