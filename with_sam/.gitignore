@@ -1,0 +1,22 @@
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+*.egg
+
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# macOS
+.DS_Store
+
+# downloaded models
+models/
+
+# output files
+output/

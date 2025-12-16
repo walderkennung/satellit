@@ -332,6 +332,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: git+https://github.com/walderkennung/python-base.git#dae35792233e466cd71c0f58004b2e55116c8361
       - pypi: git+https://github.com/facebookresearch/segment-anything.git#dca509fe793f601edb92606367a655c15ac00fdf
+      - pypi: ./
   default:
     channels:
     - url: https://conda.modular.com/max-nightly/
@@ -636,6 +637,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: git+https://github.com/walderkennung/python-base.git#dae35792233e466cd71c0f58004b2e55116c8361
       - pypi: git+https://github.com/facebookresearch/segment-anything.git#dca509fe793f601edb92606367a655c15ac00fdf
+      - pypi: ./
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/_openmp_mutex-4.5-7_kmp_llvm.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_2.conda
@@ -875,6 +877,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: git+https://github.com/walderkennung/python-base.git#dae35792233e466cd71c0f58004b2e55116c8361
       - pypi: git+https://github.com/facebookresearch/segment-anything.git#dca509fe793f601edb92606367a655c15ac00fdf
+      - pypi: ./
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-7_kmp_llvm.conda
   build_number: 7
@@ -6944,6 +6947,12 @@ packages:
   - pkg:pypi/requests?source=hash-mapping
   size: 59263
   timestamp: 1755614348400
+- pypi: ./
+  name: satellit-sam
+  version: 0.1.0
+  sha256: ddb78704302329b0bbcfeda6c7e6e7c2164f6327c5bb3ab3931a838973aea8d5
+  requires_python: '>=3.10'
+  editable: true
 - conda: https://conda.anaconda.org/conda-forge/linux-64/sdl2-2.32.56-h54a6638_0.conda
   sha256: 987ad072939fdd51c92ea8d3544b286bb240aefda329f9b03a51d9b7e777f9de
   md5: cdd138897d94dc07d99afe7113a07bec
