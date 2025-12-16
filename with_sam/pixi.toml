@@ -23,18 +23,17 @@ torchvision = ">=0.24.1,<0.25"
 
 
 [pypi-dependencies]
-python-base = { git = "ssh://git@github.com/walderkennung/python-base.git" }
+python-base = { git = "https://github.com/walderkennung/python-base.git" }
+segment_anything = { git = "https://github.com/facebookresearch/segment_anything.git" }
 
 [environments]
 cuda = ["cuda"]
 
 [feature.cuda]
-dependencies = {cuda = ">=12.0"}
 platforms = ["linux-64"]
-activation = {scripts = ["cuda_activation.sh"]}
+channels = ["nvidia", {channel = "pytorch", priority = -1}]
 system-requirements = {cuda = "12"}
-# Channels concatenate using a priority instead of overwrite, so the default channels are still used.
-# Using the priority the concatenation is controlled, default is 0, the default channels are used last.
-# Highest priority comes first.
-channels = ["nvidia", {channel = "pytorch", priority = -1}] # Results in:  ["nvidia", "conda-forge", "pytorch"] when the default is `conda-forge`
-tasks = { warmup = "python warmup.py" }
+activation = {scripts = ["cuda_activation.sh"]}
+
+[feature.cuda.dependencies]
+pytorch-cuda = ">=12.1"  # This pulls the CUDA-enabled PyTorch
