@@ -226,19 +226,24 @@ def process_tiles(
             if max_tiles is None or len(tile_positions) < max_tiles:
                 tile_positions.append((x, y))
 
+    # Separate cached and uncached tiles
+    tiles_to_process = [
+        (i, x, y)
+        for i, (x, y) in enumerate(tile_positions)
+        if (x, y) not in cached_tiles
+    ]
+    tiles_skipped = len(tile_positions) - len(tiles_to_process)
+
+    if tiles_skipped > 0:
+        print(f"Skipping {tiles_skipped} cached tiles")
+
     total_prediction_time = 0.0
     tiles_processed = 0
-    tiles_skipped = 0
 
-    with tqdm(total=len(tile_positions), desc="Processing tiles", unit="tile") as pbar:
-        for tile_idx, (x, y) in enumerate(tile_positions):
-            # Check if tile is already cached
-            if (x, y) in cached_tiles:
-                tiles_skipped += 1
-                pbar.set_postfix(status="cached", skipped=tiles_skipped)
-                pbar.update(1)
-                continue
-
+    with tqdm(
+        total=len(tiles_to_process), desc="Processing tiles", unit="tile"
+    ) as pbar:
+        for tile_idx, x, y in tiles_to_process:
             x_end = min(x + tile_size, w)
             y_end = min(y + tile_size, h)
             tile = image[y:y_end, x:x_end]
