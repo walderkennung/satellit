@@ -1,0 +1,3 @@
+#!/bin/bash
+export CUDA_HOME=$CONDA_PREFIX
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
