@@ -4,8 +4,8 @@ import time
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 from tqdm import tqdm
+from ultralytics.models.sam import SAM3SemanticPredictor
 
 import satellit_sam.pytorch as pytorch
 
@@ -180,13 +180,13 @@ def _get_cached_tiles(output_dir: str) -> set[tuple[int, int]]:
 
 def process_tiles(
     image,
-    sam,
     output_dir="tiles_output",
     initial_offset=[0, 0],
     max_tiles=None,
     tile_size=1024,
     overlap=256,
     use_cache=True,
+    prompt: str | None = None,
 ):
     """Process large image in tiles with SAM (Segment Anything Model) and save each tile result.
 
@@ -199,6 +199,7 @@ def process_tiles(
         tile_size: Size of each square tile in pixels.
         overlap: Overlap between adjacent tiles in pixels for seamless reconstruction.
         use_cache: If True, skip tiles that already exist in output_dir.
+        prompt: Optional prompt for SAM.
 
     Returns:
         Dictionary containing reconstruction information:
@@ -212,7 +213,16 @@ def process_tiles(
     """
     os.makedirs(output_dir, exist_ok=True)
     h, w = image.shape[:2]
-    mask_gen = SamAutomaticMaskGenerator(sam, points_per_side=128)
+
+    # Initialize predictor with configuration
+    overrides = dict(
+        conf=0.25,
+        task="segment",
+        mode="predict",
+        model="sam3.pt",
+        half=True,  # Use FP16 for faster inference
+    )
+    predictor = SAM3SemanticPredictor(overrides)
 
     # Get cached tiles if caching is enabled
     cached_tiles = _get_cached_tiles(output_dir) if use_cache else set()
@@ -249,7 +259,9 @@ def process_tiles(
             tile = image[y:y_end, x:x_end]
 
             start_time = time.perf_counter()
-            masks = mask_gen.generate(tile)
+            predictor.set_image(tile)
+            masks, _ = predictor(text=[prompt], save=True)
+
             elapsed_time = time.perf_counter() - start_time
             total_prediction_time += elapsed_time
 
@@ -304,13 +316,10 @@ image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # SAM expects RGB
 pytorch_instance = pytorch.init()
 
 print("Loading model...")
-sam = sam_model_registry["vit_h"](checkpoint="models/sam/sam_vit_h_4b8939.pth")
-sam.to(device=pytorch_instance.device)
 
 print("Generating masks...")
 tile_info = process_tiles(
     image,
-    sam,
     output_dir="output/tiles",
     initial_offset=[0, 0],
     tile_size=1024,
