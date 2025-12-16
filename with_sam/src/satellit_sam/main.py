@@ -1,10 +1,12 @@
 import os
+import time
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import satellit_sam.pytorch as pytorch
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
+from tqdm import tqdm
 
 
 def show_mask(mask, ax, random_color=False):
@@ -174,34 +176,54 @@ def process_tiles(
     h, w = image.shape[:2]
     mask_gen = SamAutomaticMaskGenerator(sam, points_per_side=128)
 
-    tile_idx = 0
+    # Calculate all tile positions
+    tile_positions = []
     for y in range(initial_offset[1] * tile_size, h, tile_size - overlap):
         for x in range(initial_offset[0] * tile_size, w, tile_size - overlap):
-            if tile_idx < max_tiles:
-                x_end = min(x + tile_size, w)
-                y_end = min(y + tile_size, h)
-                tile = image[y:y_end, x:x_end]
+            if len(tile_positions) < max_tiles:
+                tile_positions.append((x, y))
 
-                masks = mask_gen.generate(tile)
+    total_prediction_time = 0.0
+    tile_idx = 0
 
-                # Save tile result
-                fig, ax = plt.subplots(figsize=(10, 10))
-                ax.imshow(tile)
-                show_anns(masks, ax)
-                ax.axis("off")
-                plt.savefig(
-                    f"{output_dir}/tile_{tile_idx:04d}_x{x}_y{y}.png",
-                    bbox_inches="tight",
-                    pad_inches=0,
-                    dpi=150,
-                )
-                plt.close(fig)  # Free memory!
+    with tqdm(total=len(tile_positions), desc="Processing tiles", unit="tile") as pbar:
+        for x, y in tile_positions:
+            x_end = min(x + tile_size, w)
+            y_end = min(y + tile_size, h)
+            tile = image[y:y_end, x:x_end]
 
-                print(f"Processed tile {tile_idx} ({x}, {y}) - {len(masks)} masks")
-                tile_idx += 1
+            start_time = time.perf_counter()
+            masks = mask_gen.generate(tile)
+            elapsed_time = time.perf_counter() - start_time
+            total_prediction_time += elapsed_time
 
-                # Clear masks from memory
-                del masks
+            # Save tile result
+            fig, ax = plt.subplots(figsize=(10, 10))
+            ax.imshow(tile)
+            show_anns(masks, ax)
+            ax.axis("off")
+            plt.savefig(
+                f"{output_dir}/tile_{tile_idx:04d}_x{x}_y{y}.png",
+                bbox_inches="tight",
+                pad_inches=0,
+                dpi=150,
+            )
+            plt.close(fig)  # Free memory!
+
+            pbar.set_postfix(
+                masks=len(masks),
+                time=f"{elapsed_time:.2f}s",
+                avg=f"{total_prediction_time / (tile_idx + 1):.2f}s",
+            )
+            pbar.update(1)
+            tile_idx += 1
+
+            # Clear masks from memory
+            del masks
+
+    print(f"\nTotal prediction time: {total_prediction_time:.2f}s")
+    if tile_idx > 0:
+        print(f"Average time per tile: {total_prediction_time / tile_idx:.2f}s")
 
     # Return info needed for reconstruction
     return {
@@ -209,6 +231,8 @@ def process_tiles(
         "tile_size": tile_size,
         "overlap": overlap,
         "output_dir": output_dir,
+        "total_prediction_time": total_prediction_time,
+        "tiles_processed": tile_idx,
     }
 
 
