@@ -308,7 +308,6 @@ tile_info = process_tiles(
     sam,
     output_dir="output/tiles",
     initial_offset=[0, 0],
-    max_tiles=32,
     tile_size=1024,
     overlap=256,
 )
