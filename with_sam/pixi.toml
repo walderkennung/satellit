@@ -5,6 +5,9 @@ channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
 platforms = ["osx-arm64", "linux-64"]
 
 [tasks]
+predict-masks = "python -m satellit_sam.main"
+sam-download = "python scripts/download_sam.py"
+sam-test = "python scripts/test_sam.py"
 
 [dependencies]
 ipykernel = ">=7.1.0,<8"
@@ -23,7 +26,6 @@ python-base = { git = "https://github.com/walderkennung/python-base.git" }
 segment_anything = { git = "https://github.com/facebookresearch/segment-anything.git" }
 
 satellit_sam = { path = ".", editable = true } # this package
-
 
 # CPU feature for macOS and non-CUDA systems
 [feature.cpu.dependencies]
