@@ -1,5 +1,6 @@
 import os
 import time
+from re import I
 
 import cv2
 import matplotlib.pyplot as plt
@@ -70,7 +71,7 @@ def reconstruct_from_tiles(
     tiles_dir: str = "tiles_output",
     tile_size: int = 1024,
     overlap: int = 256,
-) -> np.ndarray:
+) -> Image.Image:
     """
     Reconstruct the full image from processed tiles.
 
@@ -158,7 +159,7 @@ def reconstruct_from_tiles(
     # Convert back to uint8
     reconstructed = (reconstructed * 255).astype(np.uint8)
 
-    return reconstructed
+    return Image.fromarray(reconstructed)
 
 
 def _get_cached_tiles(output_dir: str) -> set[tuple[int, int]]:
@@ -214,16 +215,6 @@ def process_tiles(
     os.makedirs(output_dir, exist_ok=True)
     h, w = image.shape[:2]
 
-    # Initialize predictor with configuration
-    overrides = dict(
-        conf=0.25,
-        task="segment",
-        mode="predict",
-        model="sam3.pt",
-        half=True,  # Use FP16 for faster inference
-    )
-    predictor = SAM3SemanticPredictor(overrides)
-
     # Get cached tiles if caching is enabled
     cached_tiles = _get_cached_tiles(output_dir) if use_cache else set()
     if cached_tiles:
@@ -257,26 +248,19 @@ def process_tiles(
             x_end = min(x + tile_size, w)
             y_end = min(y + tile_size, h)
             tile = image[y:y_end, x:x_end]
+            tile_image = Image.fromarray(tile)
 
             start_time = time.perf_counter()
-            predictor.set_image(tile)
-            masks, _ = predictor(text=[prompt], save=True)
+
+            results = sam3.predict(tile_image, text=prompt or "tree crowns")
 
             elapsed_time = time.perf_counter() - start_time
             total_prediction_time += elapsed_time
 
-            # Save tile result
-            fig, ax = plt.subplots(figsize=(10, 10))
-            ax.imshow(tile)
-            show_anns(masks, ax)
-            ax.axis("off")
-            plt.savefig(
-                f"{output_dir}/tile_{tile_idx:04d}_x{x}_y{y}.png",
-                bbox_inches="tight",
-                pad_inches=0,
-                dpi=150,
-            )
-            plt.close(fig)  # Free memory!
+            masks = results["masks"]
+
+            overlay = sam3.overlay_masks(tile_image, masks)
+            overlay.save(f"{output_dir}/tile_{tile_idx:04d}_x{x}_y{y}.png")
 
             tiles_processed += 1
             pbar.set_postfix(
@@ -314,7 +298,21 @@ print("Loading image...")
 image_path = "../data/orthophoto_wgs84_utm33n_agg200mm.tif"
 image = Image.open(image_path).convert("RGB")
 
-
 print("Generating masks...")
-results = sam3.predict(image, text="tree crowns")
-sam3.overlay_masks(image, results["masks"]).save("output_sam3_overlay.png")
+process_info = process_tiles(
+    np.array(image),
+    output_dir="output/tiles",
+    tile_size=1024,
+    overlap=256,
+    use_cache=True,
+    prompt="tree crowns",
+)
+
+print("Reconstructing full image from tiles...")
+reconstructed_image = reconstruct_from_tiles(
+    original_shape=process_info["original_shape"],
+    tiles_dir=process_info["output_dir"],
+    tile_size=process_info["tile_size"],
+    overlap=process_info["overlap"],
+)
+reconstructed_image.save("output/reconstructed.png")
