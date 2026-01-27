@@ -1,14 +1,16 @@
 import os
 import time
-from re import I
+from dataclasses import dataclass
+from pathlib import PurePath
+from typing import Literal
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
+from satellit_sam.sam3 import sam
 from tqdm import tqdm
-
-import satellit_sam.sam3 as sam3
+from typing_extensions import AsyncIterable
 
 
 def show_mask(mask, ax, random_color=False):
@@ -179,7 +181,63 @@ def _get_cached_tiles(output_dir: str) -> set[tuple[int, int]]:
     return cached
 
 
-def process_tiles(
+@dataclass
+class ProcessInfo:
+    original_shape: tuple[int, int, int]
+    total_prediction_time: float
+    tiles_processed: int
+    tiles_skipped: int
+    output_dir: str
+    tile_overlap: int
+    tile_size: int
+
+
+@dataclass
+class TileFile:
+    FILE_TYPES = ("png", "npz")
+
+    position: tuple[int, int]  # (x, y)
+    tile_idx: int
+    tile_size: int
+    overlap: int
+    output_dir: str
+
+    def filename(self, file_type: Literal["png"] | Literal["npz"]) -> str:
+        return f"{self.output_dir}/tile_{self.tile_idx:04d}_x{self.position[0]}_y{self.position[1]}_overlap{self.overlap}.{file_type}"
+
+    @staticmethod
+    def parse_filename(filepath: str) -> "TileFile | None":
+        fp = PurePath(filepath)
+        suffix = fp.suffix[1:]  # remove dot
+        if not fp.name.startswith("tile_") and suffix not in TileFile.FILE_TYPES:
+            return None
+
+        # Parse position from filename: tile_0000_x0_y0_overlap0.png
+        parts = fp.stem.split("_")
+        tile_idx = int(parts[1])
+        x = int(parts[2][1:])  # Remove 'x' prefix
+        y = int(parts[3][1:])  # Remove 'y' prefix
+        overlap = int(parts[4][7:])  # Remove 'overlap' prefix
+        return TileFile(
+            position=(x, y),
+            tile_idx=tile_idx,
+            tile_size=0,
+            overlap=overlap,
+            output_dir=str(fp.parent),
+        )
+
+
+@dataclass
+class TileInfo:
+    prediction_time: float
+    total_prediction_time: float
+    total_tiles: int
+    tiles_processed: int
+    tiles_skipped: int
+    number_of_masks: int
+
+
+async def process_tiles(
     image,
     output_dir="tiles_output",
     initial_offset=[0, 0],
@@ -188,7 +246,7 @@ def process_tiles(
     overlap=256,
     use_cache=True,
     prompt: str | None = None,
-):
+) -> AsyncIterable[TileInfo | ProcessInfo]:
     """Process large image in tiles with SAM (Segment Anything Model) and save each tile result.
 
     Args:
@@ -241,78 +299,108 @@ def process_tiles(
     total_prediction_time = 0.0
     tiles_processed = 0
 
-    with tqdm(
-        total=len(tiles_to_process), desc="Processing tiles", unit="tile"
-    ) as pbar:
-        for tile_idx, x, y in tiles_to_process:
-            x_end = min(x + tile_size, w)
-            y_end = min(y + tile_size, h)
-            tile = image[y:y_end, x:x_end]
-            tile_image = Image.fromarray(tile)
+    for tile_idx, x, y in tiles_to_process:
+        x_end = min(x + tile_size, w)
+        y_end = min(y + tile_size, h)
+        tile = image[y:y_end, x:x_end]
+        tile_image = Image.fromarray(tile)
 
-            start_time = time.perf_counter()
+        timestamp_start = time.perf_counter()
 
-            results = sam3.predict(tile_image, text=prompt or "tree crowns")
+        result = sam.predict(tile_image, text=prompt or "tree crowns")
 
-            elapsed_time = time.perf_counter() - start_time
-            total_prediction_time += elapsed_time
+        prediction_time = time.perf_counter() - timestamp_start
+        total_prediction_time += prediction_time
 
-            masks = results["masks"]
+        tile_file = TileFile(
+            position=(x, y),
+            tile_idx=tile_idx,
+            tile_size=tile_size,
+            overlap=overlap,
+            output_dir=output_dir,
+        )
+        result.save(tile_file.filename("npz"))
 
-            overlay = sam3.overlay_masks(tile_image, masks)
-            overlay.save(f"{output_dir}/tile_{tile_idx:04d}_x{x}_y{y}.png")
+        overlay = sam.overlay_masks(tile_image, result.masks)
+        overlay.save(tile_file.filename("png"))
 
-            tiles_processed += 1
-            pbar.set_postfix(
-                masks=len(masks),
-                time=f"{elapsed_time:.2f}s",
-                avg=f"{total_prediction_time / tiles_processed:.2f}s",
-                skipped=tiles_skipped,
-            )
-            pbar.update(1)
+        tiles_processed += 1
 
-            # Clear masks from memory
-            del masks
-
-    print(f"\nTotal prediction time: {total_prediction_time:.2f}s")
-    print(
-        f"Tiles processed: {tiles_processed}, Tiles skipped (cached): {tiles_skipped}"
-    )
-    if tiles_processed > 0:
-        print(f"Average time per tile: {total_prediction_time / tiles_processed:.2f}s")
+        yield TileInfo(
+            total_tiles=len(tiles_to_process),
+            prediction_time=prediction_time,
+            total_prediction_time=total_prediction_time,
+            tiles_processed=tiles_processed,
+            tiles_skipped=tiles_skipped,
+            number_of_masks=len(result.masks),
+        )
 
     # Return info needed for reconstruction
-    return {
-        "original_shape": image.shape,
-        "tile_size": tile_size,
-        "overlap": overlap,
-        "output_dir": output_dir,
-        "total_prediction_time": total_prediction_time,
-        "tiles_processed": tiles_processed,
-        "tiles_skipped": tiles_skipped,
-    }
+    yield ProcessInfo(
+        original_shape=image.shape,
+        tile_size=tile_size,
+        tile_overlap=overlap,
+        output_dir=output_dir,
+        total_prediction_time=total_prediction_time,
+        tiles_processed=tiles_processed,
+        tiles_skipped=tiles_skipped,
+    )
+    return
 
 
-print("Loading image...")
-# Load image
-image_path = "../data/orthophoto_wgs84_utm33n_agg200mm.tif"
-image = Image.open(image_path).convert("RGB")
+async def main():
+    print("Loading image...")
+    # Load image
+    image_path = "../data/orthophoto_wgs84_utm33n_agg200mm.tif"
+    image = Image.open(image_path).convert("RGB")
 
-print("Generating masks...")
-process_info = process_tiles(
-    np.array(image),
-    output_dir="output/tiles",
-    tile_size=1024,
-    overlap=256,
-    use_cache=True,
-    prompt="tree crowns",
-)
+    print("Generating masks...")
+    process_info = None
+    with tqdm(total=float("inf"), desc="Processing tiles", unit="tile") as pbar:
+        async for info in process_tiles(
+            np.array(image),
+            output_dir="output/tiles",
+            tile_size=256,
+            overlap=32,
+            use_cache=True,
+            prompt="tree crowns",
+        ):
+            if isinstance(info, TileInfo):
+                if info.total_tiles != pbar.total:
+                    pbar.total = info.total_tiles
+                pbar.set_postfix(
+                    masks=info.number_of_masks,
+                    time=f"{info.prediction_time:.2f}s",
+                    avg=f"{info.total_prediction_time / info.tiles_processed:.2f}s",
+                    skipped=info.tiles_skipped,
+                )
+                pbar.update(1)
+            if isinstance(info, ProcessInfo):
+                process_info = info
+                print(f"\nTotal prediction time: {info.total_prediction_time:.2f}s")
+                print(
+                    f"Tiles processed: {info.tiles_processed}, Tiles skipped (cached): {info.tiles_skipped}"
+                )
+                if info.tiles_processed > 0:
+                    print(
+                        f"Average time per tile: {info.total_prediction_time / info.tiles_processed:.2f}s"
+                    )
 
-print("Reconstructing full image from tiles...")
-reconstructed_image = reconstruct_from_tiles(
-    original_shape=process_info["original_shape"],
-    tiles_dir=process_info["output_dir"],
-    tile_size=process_info["tile_size"],
-    overlap=process_info["overlap"],
-)
-reconstructed_image.save("output/reconstructed.png")
+        if process_info is None:
+            print("Tile processing did not complete successfully.")
+            return
+
+    print("Reconstructing full image from tiles...")
+    reconstructed_image = reconstruct_from_tiles(
+        original_shape=process_info.original_shape,
+        tiles_dir=process_info.output_dir,
+        tile_size=process_info.tile_size,
+        overlap=process_info.tile_overlap,
+    )
+    reconstructed_image.save("output/reconstructed.png")
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())
