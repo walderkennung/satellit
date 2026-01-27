@@ -8,9 +8,10 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
-from satellit_sam.sam3 import sam
 from tqdm import tqdm
 from typing_extensions import AsyncIterable
+
+from satellit_sam.sam3 import sam
 
 
 def show_mask(mask, ax, random_color=False):
@@ -276,7 +277,7 @@ async def process_tiles(
     # Get cached tiles if caching is enabled
     cached_tiles = _get_cached_tiles(output_dir) if use_cache else set()
     if cached_tiles:
-        print(f"Found {len(cached_tiles)} cached tiles in {output_dir}")
+        print(f"\x1b[2K\rFound {len(cached_tiles)} cached tiles in '{output_dir}'")
 
     # Calculate all tile positions
     tile_positions = []
