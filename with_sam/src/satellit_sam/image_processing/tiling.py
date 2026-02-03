@@ -23,8 +23,8 @@ def _tile_geometries(
     y_tile_offset = tile_size[1] - overlap[1]
 
     tile_positions = []
-    for y_start in range(tile_size[1], image_shape[1], y_tile_offset):
-        for x_start in range(tile_size[0], image_shape[0], x_tile_offset):
+    for y_start in range(0, image_shape[1], y_tile_offset):
+        for x_start in range(0, image_shape[0], x_tile_offset):
             y_end = min(y_start + tile_size[1], image_shape[1])
             x_end = min(x_start + tile_size[0], image_shape[0])
 
@@ -168,10 +168,10 @@ class TilesDir:
         tile_files = []
         for filename in os.listdir(self.tiles_rgb_path()):
             if filename.startswith("tile_") and filename.endswith(".png"):
-                # Parse position from filename: tile_0000_x0_y0.png
+                # Parse position from filename: tile_x0_y0.png
                 parts = filename.replace(".png", "").split("_")
-                x = int(parts[2][1:])  # Remove 'x' prefix
-                y = int(parts[3][1:])  # Remove 'y' prefix
+                x = int(parts[1][1:])  # Remove 'x' prefix
+                y = int(parts[2][1:])  # Remove 'y' prefix
                 tile_files.append((filename, x, y))
 
         # Sort by position for consistent processing
@@ -243,10 +243,10 @@ class TilesDir:
 
         for filename in os.listdir(self.tiles_rgb_path()):
             if filename.startswith("tile_") and filename.endswith(".png"):
-                # Parse position from filename: tile_0000_x0_y0.png
+                # Parse position from filename: tile_x0_y0.png
                 parts = filename.replace(".png", "").split("_")
-                x = int(parts[2][1:])  # Remove 'x' prefix
-                y = int(parts[3][1:])  # Remove 'y' prefix
+                x = int(parts[1][1:])  # Remove 'x' prefix
+                y = int(parts[2][1:])  # Remove 'y' prefix
                 cached.add((x, y))
 
         return cached

@@ -36,6 +36,7 @@ pixi run sam-download
 ```
 
 This downloads all three SAM model variants to `models/sam/`:
+
 - `sam_vit_h_4b8939.pth` (ViT-H, largest, best quality)
 - `sam_vit_l_0b3195.pth` (ViT-L, medium)
 - `sam_vit_b_01ec64.pth` (ViT-B, smallest, fastest)
@@ -67,6 +68,7 @@ pixi run predict-masks
 ```
 
 This will:
+
 1. Load the image and split it into tiles
 2. Run SAM automatic mask generation on each tile
 3. Save individual tile results to `output/tiles/`
@@ -111,12 +113,63 @@ with_sam/
 └── README.md
 ```
 
+## Testing
+
+The project includes a comprehensive test suite for the `image_processing` module with **49 tests** covering all functionality.
+
+### Run all tests
+
+```bash
+pixi run test
+```
+
+Or explicitly:
+
+```bash
+pixi run python -m pytest tests/ -v
+```
+
+### Run specific test categories
+
+```bash
+# Unit tests only
+pixi run python -m pytest tests/ -m unit -v
+
+# Integration tests only
+pixi run python -m pytest tests/ -m integration -v
+```
+
+### Run specific test files
+
+```bash
+# Image class tests (20 tests)
+pixi run python -m pytest tests/test_image.py -v
+
+# Tiling functionality tests (13 tests)
+pixi run python -m pytest tests/test_tiling.py -v
+
+# End-to-end integration tests (16 tests)
+pixi run python -m pytest tests/test_integration.py -v
+```
+
+### Test Coverage
+
+The test suite covers:
+
+- ✅ Image loading, saving, and cropping operations
+- ✅ Tiling with various configurations (overlap, sizes)
+- ✅ Metadata serialization and deserialization
+- ✅ End-to-end tile → reconstruct pipelines
+- ✅ Reconstruction accuracy validation (SSIM >95%)
+- ✅ Real satellite imagery processing
+- ✅ Edge cases and error handling
+
 ## Environments
 
-| Environment | Platform | Accelerator |
-|-------------|----------|-------------|
-| `default`   | macOS, Linux | CPU |
-| `cuda`      | Linux | NVIDIA GPU (CUDA 12.0+) |
+| Environment | Platform     | Accelerator             |
+| ----------- | ------------ | ----------------------- |
+| `default`   | macOS, Linux | CPU                     |
+| `cuda`      | Linux        | NVIDIA GPU (CUDA 12.0+) |
 
 To run commands in a specific environment:
 

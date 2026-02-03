@@ -20,3 +20,4 @@ models/
 
 # output files
 output/
+.coverage
