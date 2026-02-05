@@ -9,6 +9,22 @@ from .image import Image
 
 
 @dataclass
+class Tile:
+    image: Image
+    path: str
+
+
+def _tiles_rgb_path(output_path: str) -> str:
+    """Get path to RGB tiles directory."""
+    return os.path.join(output_path, "tiles_rgb")
+
+
+def _tiles_annotated_path(output_path: str) -> str:
+    """Get path to annotated tiles directory."""
+    return os.path.join(output_path, "tiles_annotated")
+
+
+@dataclass
 class TileGeometry:
     start: tuple[int, int]
     end: tuple[int, int]
@@ -58,7 +74,12 @@ def tile_image(
             tile_geo.start[0], tile_geo.start[1], tile_geo.end[0], tile_geo.end[1]
         )
         tile_filename = f"tile_x{tile_geo.start[0]}_y{tile_geo.start[1]}.png"
-        tile.save(os.path.join(output_path, tile_filename))
+
+        tiles_rgb_dir = _tiles_rgb_path(output_path)
+        if not os.path.exists(tiles_rgb_dir):
+            os.mkdir(tiles_rgb_dir)
+
+        tile.save(os.path.join(tiles_rgb_dir, tile_filename))
 
     return TilesDir(
         output_path=output_path,
@@ -127,6 +148,19 @@ class TilesDir:
                 },
                 f,
             )
+
+    def save_annotated_tile(self, tile: Tile, annotated_image: Image) -> None:
+        """
+        Save the annotated tile image to the tiles_annotated directory.
+
+        Args:
+            tile: Tile object containing the original tile image and its path.
+            annotated_image: Annotated Image object to be saved.
+        """
+        if not os.path.exists(self.tiles_annotated_path()):
+            os.mkdir(self.tiles_annotated_path())
+        tile_filename = os.path.basename(tile.path)
+        annotated_image.save(os.path.join(self.tiles_annotated_path(), tile_filename))
 
     def reconstruct_image(self) -> Image:
         """
@@ -233,7 +267,11 @@ class TilesDir:
 
     def tiles_rgb_path(self) -> str:
         """Get path to RGB tiles directory."""
-        return os.path.join(self.output_path, "tiles_rgb")
+        return _tiles_rgb_path(self.output_path)
+
+    def tiles_annotated_path(self) -> str:
+        """Get path to annotated tiles directory."""
+        return _tiles_annotated_path(self.output_path)
 
     def get_tile_positions(self) -> set[tuple[int, int]]:
         """Get set of (x, y) positions for already processed tiles."""
@@ -254,10 +292,8 @@ class TilesDir:
     def __iter__(self) -> "_TilesDirIterator":
         return _TilesDirIterator(self)
 
-
-@dataclass
-class Tile:
-    image: Image
+    def __len__(self) -> int:
+        return len(self.__iter__())
 
 
 class _TilesDirIterator:
@@ -276,6 +312,9 @@ class _TilesDirIterator:
     def __iter__(self) -> "_TilesDirIterator":
         return self
 
+    def __len__(self) -> int:
+        return len(self._tile_paths)
+
     def __next__(self) -> Tile:
         if self._current_index >= len(self._tile_paths):
             raise StopIteration
@@ -283,4 +322,4 @@ class _TilesDirIterator:
         image_path = self._tile_paths[self._current_index]
         self._current_index += 1
         image = Image.load(image_path)
-        return Tile(image=image)
+        return Tile(image=image, path=image_path)

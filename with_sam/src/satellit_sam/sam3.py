@@ -1,102 +1,61 @@
 from dataclasses import dataclass
 
-import matplotlib
-import numpy as np
 import torch
-from PIL import Image
+import torchvision
 from transformers import Sam3Model, Sam3Processor
 
+from satellit_sam.plot import annotate, from_sam
 
-@dataclass
-class PredictionResult:
-    masks: list[Image.Image]
-    boxes: torch.Tensor  # (batch_size, num_queries, 4)
-    scores: torch.Tensor  # (batch_size, num_queries)
-
-    def save(self, output_path: str):
-        np.savez_compressed(
-            output_path,
-            masks=np.array(self.masks),
-            boxes=self.boxes.cpu().numpy(),
-            scores=self.scores.cpu().numpy(),
-        )
+from .image_processing import Image
 
 
 class SamSingleton:
     def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+
+            if torch.cuda.get_device_properties(0).major >= 8:
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
+
+            self.device = "cuda"
+        else:
+            self.device = "cpu"
 
         self.model = Sam3Model.from_pretrained("facebook/sam3").to(self.device)
         self.processor = Sam3Processor.from_pretrained("facebook/sam3")
 
+    def print_debug_info(self):
+        print("PyTorch version:", torch.__version__)
+        print("Torchvision version:", torchvision.__version__)
+        print("CUDA is available:", torch.cuda.is_available())
+
     def predict(
         self,
-        image: Image.Image,
+        image: Image,
         text: str,
         threshold: float = 0.01,
         mask_threshold: float = 0.01,
-    ) -> PredictionResult:
+    ) -> Image:
         # Segment using text prompt
-        inputs = self.processor(images=image, text=text, return_tensors="pt").to(
+        inputs = self.processor(images=image.data, text=text, return_tensors="pt").to(
             self.device
         )
 
         with torch.no_grad():
             outputs = self.model(**inputs)
 
-        scores = outputs["pred_logits"]
-        result = PredictionResult(
-            masks=[],
-            boxes=outputs["pred_boxes"],
-            scores=scores if scores is not None else torch.Tensor([]),
-        )
-
-        print("Outputs:")
-        print(repr(outputs))
-
         results = self.processor.post_process_instance_segmentation(
             outputs,
-            threshold=threshold,
-            mask_threshold=mask_threshold,
-            target_sizes=inputs["original_sizes"].tolist(),
-        )
+            threshold=0.5,
+            mask_threshold=0.5,
+            target_sizes=inputs.get("original_sizes").tolist(),
+        )[0]
 
-        print("Results:")
-        print(repr(results))
+        detections = from_sam(sam_result=results)
+        detections = detections[detections.confidence > 0.5]
 
-        masks = []
-        if "masks" in results[0]:
-            for i, mask_tensor in enumerate(results[0]["masks"]):
-                mask_np = (mask_tensor.cpu().numpy() * 255).astype(np.uint8)
-                mask_pil = Image.fromarray(mask_np)
-                masks.append(mask_pil)
-            result.masks = masks
-
-        return result
-
-    def overlay_masks(self, image, masks):
-        image = image.convert("RGBA")
-        masks = 255 * np.array(masks).astype(np.uint8)
-
-        n_masks = masks.shape[0]
-        cmap = matplotlib.colormaps.get_cmap("rainbow").resampled(n_masks)
-        colors = [tuple(int(c * 255) for c in cmap(i)[:3]) for i in range(n_masks)]
-
-        for mask, color in zip(masks, colors):
-            mask = mask.squeeze()
-            if mask.ndim == 1:
-                mask_img = Image.fromarray(mask.reshape(1, -1))
-            elif mask.ndim == 2:
-                mask_img = Image.fromarray(mask)
-            else:
-                print(f"Unexpected mask shape: {mask.shape}")
-                continue
-            mask_img = mask_img.resize(image.size, Image.NEAREST)
-            overlay = Image.new("RGBA", image.size, color + (0,))
-            alpha = mask_img.point(lambda v: int(v * 0.5))
-            overlay.putalpha(alpha)
-            image = Image.alpha_composite(image, overlay)
-        return image
+        return annotate(image=image, detections=detections, label=text)
 
 
 sam = SamSingleton()

@@ -10,6 +10,10 @@ class Image:
     channels: int
     data: np.ndarray
 
+    def copy(self) -> "Image":
+        """Return a copy of the image."""
+        return Image(size=self.size, channels=self.channels, data=self.data.copy())
+
     def save(self, path: str) -> None:
         """Save the image to the specified path."""
         if self.channels == 4:

@@ -1,57 +1,69 @@
-import matplotlib.pyplot as plt
+from typing import Optional
+
 import numpy as np
+import supervision as sv
+import torch
+
+from .image_processing import Image
+
+COLOR = sv.ColorPalette.from_hex(
+    [
+        "#ffff00",
+        "#ff9b00",
+        "#ff8080",
+        "#ff66b2",
+        "#ff66ff",
+        "#b266ff",
+        "#9999ff",
+        "#3399ff",
+        "#66ffff",
+        "#33ff99",
+        "#66ff66",
+        "#99ff00",
+    ]
+)
 
 
-def show_mask(mask, ax, random_color=False):
-    if random_color:
-        color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-    else:
-        color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
-    h, w = mask.shape[-2:]
-    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    ax.imshow(mask_image)
+def from_sam(sam_result: dict) -> sv.Detections:
+    if len(sam_result["masks"]) == 0:
+        return sv.Detections.empty()
+
+    # Convert to supervision Detections
+    masks = np.array([m.cpu().numpy() for m in sam_result["masks"]])  # (N, H, W)
+    boxes = np.array([b.cpu().numpy() for b in sam_result["boxes"]])  # (N, 4) xyxy
+    scores = np.array([s.cpu().item() for s in sam_result["scores"]])  # (N,)
+
+    return sv.Detections(xyxy=boxes, confidence=scores, mask=masks)
 
 
-def show_points(coords, labels, ax, marker_size=375):
-    pos_points = coords[labels == 1]
-    neg_points = coords[labels == 0]
-    ax.scatter(
-        pos_points[:, 0],
-        pos_points[:, 1],
-        color="green",
-        marker="*",
-        s=marker_size,
-        edgecolor="white",
-        linewidth=1.25,
+def annotate(
+    image: Image, detections: sv.Detections, label: Optional[str] = None
+) -> Image:
+    text_scale = sv.calculate_optimal_text_scale(resolution_wh=image.size)
+
+    mask_annotator = sv.MaskAnnotator(
+        color=COLOR, color_lookup=sv.ColorLookup.INDEX, opacity=0.6
     )
-    ax.scatter(
-        neg_points[:, 0],
-        neg_points[:, 1],
-        color="red",
-        marker="*",
-        s=marker_size,
-        edgecolor="white",
-        linewidth=1.25,
+    box_annotator = sv.BoxAnnotator(
+        color=COLOR, color_lookup=sv.ColorLookup.INDEX, thickness=1
+    )
+    label_annotator = sv.LabelAnnotator(
+        color=COLOR,
+        color_lookup=sv.ColorLookup.INDEX,
+        text_scale=0.4,
+        text_padding=5,
+        text_color=sv.Color.BLACK,
+        text_thickness=1,
     )
 
+    annotated_image = image.copy()
+    annotated_image.data = mask_annotator.annotate(annotated_image.data, detections)
+    annotated_image.data = box_annotator.annotate(annotated_image.data, detections)
 
-def show_box(box, ax):
-    x0, y0 = box[0], box[1]
-    w, h = box[2] - box[0], box[3] - box[1]
-    ax.add_patch(
-        plt.Rectangle((x0, y0), w, h, edgecolor="green", facecolor=(0, 0, 0, 0), lw=2)
-    )
+    if label:
+        labels = [f"{label} {confidence:.2f}" for confidence in detections.confidence]
+        annotated_image.data = label_annotator.annotate(
+            annotated_image.data, detections, labels
+        )
 
-
-def show_anns(anns, ax):
-    if len(anns) == 0:
-        return
-    sorted_anns = sorted(anns, key=lambda x: x["area"], reverse=True)
-    ax.set_autoscale_on(False)
-    for ann in sorted_anns:
-        m = ann["segmentation"]
-        img = np.ones((m.shape[0], m.shape[1], 3))
-        color_mask = np.random.random(3)
-        for i in range(3):
-            img[:, :, i] = color_mask[i]
-        ax.imshow(np.dstack((img, m * 0.35)))
+    return annotated_image
