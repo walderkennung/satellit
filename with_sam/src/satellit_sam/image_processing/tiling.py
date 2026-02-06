@@ -76,8 +76,7 @@ def tile_image(
         tile_filename = f"tile_x{tile_geo.start[0]}_y{tile_geo.start[1]}.png"
 
         tiles_rgb_dir = _tiles_rgb_path(output_path)
-        if not os.path.exists(tiles_rgb_dir):
-            os.mkdir(tiles_rgb_dir)
+        os.makedirs(tiles_rgb_dir, exist_ok=True)
 
         tile.save(os.path.join(tiles_rgb_dir, tile_filename))
 
@@ -157,8 +156,7 @@ class TilesDir:
             tile: Tile object containing the original tile image and its path.
             annotated_image: Annotated Image object to be saved.
         """
-        if not os.path.exists(self.tiles_annotated_path()):
-            os.mkdir(self.tiles_annotated_path())
+        os.makedirs(self.tiles_annotated_path(), exist_ok=True)
         tile_filename = os.path.basename(tile.path)
         annotated_image.save(os.path.join(self.tiles_annotated_path(), tile_filename))
 
