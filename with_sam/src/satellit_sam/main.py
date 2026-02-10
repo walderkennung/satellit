@@ -1,11 +1,16 @@
 import asyncio
 from pathlib import Path
 
+import numpy as np
 import typer
 from tqdm import tqdm
 from typing_extensions import Annotated
 
-from src.satellit_sam.image_processing import Image, tile_image
+from src.satellit_sam.image_processing import (
+    Image,
+    create_heightmap_from_las,
+    tile_image,
+)
 
 from .sam3 import sam
 
@@ -74,6 +79,26 @@ async def async_main(
 
     print(f"Loading image from: {image_path}")
     image = Image.load(str(image_path))
+
+    las_file = Path("../data/Traunstein/2018/inventory_plot_normalized.las")
+
+    # Simple one-line creation and saving
+    heightmap = create_heightmap_from_las(
+        las_file, width=image.size[0], height=image.size[1], method="max"
+    )
+    print(f"Height map shape: {heightmap.shape}")
+    print(f"Height range: {heightmap.z_range}")
+    print(f"Resolution: {heightmap.resolution}m per pixel")
+
+    # Save as image
+    heightmap_path = f"{output_path}/heightmap.png"
+    heightmap.save(heightmap_path)
+    print(f"Saved to: {heightmap_path}")
+
+    # Multiply the RGB image with the grayscale heightmap
+    image.data = image.data * heightmap.to_rgb()
+
+    image.save(f"{output_path}/heightmap_overlay.png")
 
     print(f"Tiling image (tile_size={tile_size}, overlap={overlap})...")
     tiling_dir = tile_image(
