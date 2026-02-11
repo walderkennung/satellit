@@ -33,29 +33,42 @@ class SamSingleton:
     def predict(
         self,
         image: Image,
-        text: str,
-        threshold: float = 0.01,
-        mask_threshold: float = 0.01,
+        text: str | None = None,
+        boxes: list[tuple[float, float, float, float]] | None = None,
+        box_labels: list[int] | None = None,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.5,
     ) -> Image:
-        # Segment using text prompt
-        inputs = self.processor(images=image.data, text=text, return_tensors="pt").to(
-            self.device
-        )
+        if text is None and not boxes:
+            raise ValueError("At least one prompt is required: text and/or boxes.")
+
+        processor_kwargs = {"images": image.data, "return_tensors": "pt"}
+        if text is not None:
+            processor_kwargs["text"] = text
+
+        if boxes:
+            processor_kwargs["input_boxes"] = [[list(box) for box in boxes]]
+            processor_kwargs["input_boxes_labels"] = [
+                box_labels or [1] * len(boxes)
+            ]
+
+        inputs = self.processor(**processor_kwargs).to(self.device)
 
         with torch.no_grad():
             outputs = self.model(**inputs)
 
         results = self.processor.post_process_instance_segmentation(
             outputs,
-            threshold=0.5,
-            mask_threshold=0.5,
+            threshold=threshold,
+            mask_threshold=mask_threshold,
             target_sizes=inputs.get("original_sizes").tolist(),
         )[0]
 
         detections = from_sam(sam_result=results)
         detections = detections[detections.confidence > 0.5]
 
-        return annotate(image=image, detections=detections, label=text)
+        label = text if text else ("bbox" if boxes else None)
+        return annotate(image=image, detections=detections, label=label)
 
 
 sam = SamSingleton()
