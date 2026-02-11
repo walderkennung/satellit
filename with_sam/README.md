@@ -7,6 +7,9 @@ Satellite imagery segmentation using [Segment Anything Model (SAM)](https://gith
 - Process large satellite/orthophoto images by tiling
 - Automatic mask generation using SAM
 - Tile reconstruction with smooth blending for overlapping regions
+- Weak-label generation from forest inventory data (CSV or SHP)
+- GeoTIFF/UTM-aware inventory alignment for SHP inputs (EPSG:32633)
+- Inventory QA visualizations (crowns + tile grid overlays)
 - Support for CPU (macOS/Linux) and CUDA (Linux) acceleration
 
 ## Prerequisites
@@ -67,6 +70,12 @@ Process your image and generate segmentation masks:
 pixi run predict-masks
 ```
 
+Run with one or more bounding-box prompts (image-space `x1,y1,x2,y2`):
+
+```bash
+pixi run predict-masks -- --bbox 500,600,900,1000 --bbox 1200,1400,1700,1900
+```
+
 This will:
 
 1. Load the image and split it into tiles
@@ -91,6 +100,66 @@ process_tiles(
 )
 ```
 
+### Generate weak labels from inventory
+
+Create per-tile weak labels (`x`, `y`, `crown_radius`) from inventory data.
+
+Recommended input:
+- `--inventory-shp` with UTM coordinates (for Traunstein: EPSG:32633)
+
+Also supported:
+- `--inventory-csv` with local coordinates (supports optional auto-alignment)
+
+Run with SHP input:
+
+```bash
+pixi run python scripts/generate_inventory_weak_labels.py \
+  --image-tif ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --inventory-shp ../data/Traunstein/inventory/processed/shifted_new_tree_positions_UTM33N.shp \
+  --output-dir output/inventory_from_shp \
+  --tile-size 1024 \
+  --overlap 128 \
+  --only-non-empty-tiles \
+  --deduplicate-tree-id \
+  --export-visualizations
+```
+
+Filter to trees with DBH >= 50 cm:
+
+```bash
+pixi run python scripts/generate_inventory_weak_labels.py \
+  --image-tif ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --inventory-shp ../data/Traunstein/inventory/processed/shifted_new_tree_positions_UTM33N.shp \
+  --output-dir output/inventory_from_shp_dbh50 \
+  --min-dbh-cm 50 \
+  --tile-size 1024 \
+  --overlap 128 \
+  --only-non-empty-tiles \
+  --deduplicate-tree-id \
+  --export-visualizations
+```
+
+Run with CSV input (local coordinates) and automatic alignment:
+
+```bash
+pixi run python scripts/generate_inventory_weak_labels.py \
+  --image-tif ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --inventory-csv ../data/Traunstein/inventory/original/PlotDataReport10-04-2018_1323085911.csv \
+  --output-dir output/inventory_from_csv_auto \
+  --auto-align \
+  --tile-size 1024 \
+  --overlap 128 \
+  --only-non-empty-tiles \
+  --deduplicate-tree-id \
+  --export-visualizations
+```
+
+Generated outputs include:
+- `labels_tiles.yaml` and `labels_tiles.json` (tile-wise weak labels)
+- `trees_projected.csv` (projected/global coordinates and crown radius)
+- `summary.json` (run parameters and counts)
+- `visualizations/labels_crowns.png` and `visualizations/labels_crowns_tiles.png` (QA)
+
 ## Project Structure
 
 ```
@@ -103,6 +172,7 @@ with_sam/
 ├── scripts/
 │   ├── cuda_activation.sh
 │   ├── download_sam.py   # Model download script
+│   ├── generate_inventory_weak_labels.py  # Inventory -> weak labels
 │   └── test_sam.py       # SAM test script
 ├── src/
 │   └── satellit_sam/
