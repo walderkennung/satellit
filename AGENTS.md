@@ -29,17 +29,18 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 
 ## Environment
 
-- Use Pixi for all project-related commands in this repository.
+- Use Pixi for SAM/project code commands in this repository.
 - Do not run tools directly with global/system binaries (for example `python`, `pip`, `pytest`) when a Pixi-based invocation is possible.
 - Run commands via `pixi run ...` from the relevant project directory.
 - The only Pixi project currently in the repo is `with_sam` (SAM work).
 - Install or sync dependencies with Pixi only.
+- Documentation site commands are run from `docs/` using `bun`
 
 ## Documentation
 
-- Store technical knowledge and learnings as concise, separate Markdown files in `docs/knowledge`.
+- Store technical knowledge and learnings as concise, separate Markdown files in `docs/content/knowledgebase`.
 - Cross-reference related knowledge documents with Markdown links.
-- Keep detailed protocols for investigations and experiments in `docs/experimentation_notes`.
+- Keep detailed protocols for investigations and experiments in `docs/content/experimentation_notes`.
 - Add one protocol document per investigation/experiment and keep it complete enough to reproduce the work.
 - If you think that something is important to be documented propose a change to the documentation.
 
@@ -62,6 +63,11 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 - `pixi run sam-download` (download SAM checkpoints)
 - `pixi run sam-test` (validate SAM setup)
 - `pixi run predict-masks` (run mask prediction)
+- `pixi run generate-weak-labels -- ...` (generate inventory weak labels)
 - `pixi run test` (run test suite with coverage)
 - For CUDA on Linux: `pixi install -e cuda` and `pixi run -e cuda predict-masks`.
+- Documentation site tasks (run from `docs/`):
+- `bun run gen:api` (generate API docs via Pixi task)
+- `bun run dev` (generate API docs, then run docmd dev server)
+- `bun run build` (generate API docs, then build static site)
 - If you add repeatable checks, document runnable commands here.
