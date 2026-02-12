@@ -42,8 +42,8 @@ pixi run satellit -- --help
 
 Command tree:
 
-- `image-processing`
 - `label weak`
+- `label by-bounding-boxes`
 
 Global options:
 
@@ -51,23 +51,22 @@ Global options:
 - `--show-completion`
 - `--help`
 
-### `image-processing`
+### `label by-bounding-boxes`
 
-Run image segmentation:
+Run label generation from bounding-box prompts:
 
 ```bash
-pixi run satellit -- image-processing \
+pixi run satellit -- label by-bounding-boxes \
   --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
   --output-path output/predict \
   --tile-size 2048 \
-  --overlap 64 \
-  --text-prompt trees
+  --overlap 64
 ```
 
 With one or more image-space bounding boxes (`x1,y1,x2,y2`):
 
 ```bash
-pixi run satellit -- image-processing \
+pixi run satellit -- label by-bounding-boxes \
   --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
   --bbox 500,600,900,1000 \
   --bbox 1200,1400,1700,1900
@@ -75,8 +74,6 @@ pixi run satellit -- image-processing \
 
 Notes:
 
-- If neither `--text-prompt` nor `--bbox` is provided, the prompt defaults to `trees`.
-- If only `--bbox` is provided, segmentation runs from box prompts without a text prompt.
 - `--weak-labels-csv` can load per-tree tile-local bboxes from `label weak` output (`labels_tiles.csv`).
 
 ### `label weak`
@@ -90,7 +87,6 @@ pixi run satellit -- label weak \
   --output-dir output/inventory_from_shp \
   --tile-size 1024 \
   --overlap 128 \
-  --only-non-empty-tiles \
   --deduplicate-tree-id \
   --export-visualizations
 ```
@@ -130,5 +126,5 @@ pixi run test
 Run in CUDA environment:
 
 ```bash
-pixi run -e cuda satellit -- image-processing --help
+pixi run -e cuda satellit -- label by-bounding-boxes --help
 ```

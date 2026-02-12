@@ -17,9 +17,9 @@ No commands currently use positional arguments; all inputs are passed via option
 
 ```text
 satellit
-├── image-processing
 └── label
-    └── weak
+    ├── weak
+    └── by-bounding-boxes
 ```
 
 ## Root Command: `satellit`
@@ -38,50 +38,6 @@ Global options:
 | `--show-completion` | flag | Print completion script for the current shell. |
 | `--help` | flag | Show help and exit. |
 
-## Command: `image-processing`
-
-Usage:
-
-```bash
-pixi run satellit -- image-processing --image <PATH> [OPTIONS]
-```
-
-Description: Process satellite imagery using SAM.
-
-Options:
-
-| Option | Type | Required | Default | Description |
-| --- | --- | --- | --- | --- |
-| `--image` | file path | yes | - | Input image file (for example, GeoTIFF). |
-| `--tile-size` | int | no | `2048` | Tile size in pixels. |
-| `--overlap` | int | no | `64` | Overlap between tiles in pixels. |
-| `--output-path` | path | no | `output/test_tiles` | Output directory for generated tiles/results. |
-| `--text-prompt` | str | no | `None` | Optional text prompt for detection. |
-| `--bbox` | str (repeatable) | no | `None` | Bounding box in `x1,y1,x2,y2` format. Repeat flag for multiple boxes. |
-| `--help` | flag | no | - | Show help and exit. |
-
-Behavior notes:
-
-- If neither `--text-prompt` nor `--bbox` is provided, the text prompt defaults to `trees`.
-- `--bbox` values must be numeric and satisfy `x2 > x1` and `y2 > y1`.
-
-Examples:
-
-```bash
-pixi run satellit -- image-processing \
-  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
-  --tile-size 2048 \
-  --overlap 64 \
-  --output-path output/predict
-```
-
-```bash
-pixi run satellit -- image-processing \
-  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
-  --bbox 500,600,900,1000 \
-  --bbox 1200,1400,1700,1900
-```
-
 ## Command Group: `label`
 
 Usage:
@@ -93,6 +49,7 @@ pixi run satellit -- label --help
 Subcommands:
 
 - `weak`
+- `by-bounding-boxes`
 
 ## Command: `label weak`
 
@@ -119,7 +76,6 @@ Options:
 | `--output-dir` | path | yes | - | Output directory for labels and optional tiles. |
 | `--tile-size` | int | no | `1024` | Tile size in pixels. |
 | `--overlap` | int | no | `128` | Tile overlap in pixels. |
-| `--only-non-empty-tiles` | flag | no | `False` | Write only tiles that contain at least one tree. |
 | `--x-field` | str | no | `PX` | Inventory x-coordinate field name. |
 | `--y-field` | str | no | `PY` | Inventory y-coordinate field name. |
 | `--tree-id-field` | str | no | `TreeID` | Inventory tree-id field name. |
@@ -151,7 +107,44 @@ pixi run satellit -- label weak \
   --output-dir output/inventory_from_shp \
   --tile-size 1024 \
   --overlap 128 \
-  --only-non-empty-tiles \
   --deduplicate-tree-id \
   --export-visualizations
+```
+
+## Command: `label by-bounding-boxes`
+
+Usage:
+
+```bash
+pixi run satellit -- label by-bounding-boxes --image <PATH> [OPTIONS]
+```
+
+Description: Generate label overlays from bounding-box prompts.
+
+Options:
+
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--image` | file path | yes | - | Input image file (for example, GeoTIFF). |
+| `--tile-size` | int | no | `2048` | Tile size in pixels. |
+| `--overlap` | int | no | `64` | Overlap between tiles in pixels. |
+| `--output-path` | path | no | `output/test_tiles` | Output directory for generated tiles/results. |
+| `--bbox` | str (repeatable) | no | `None` | Bounding box in `x1,y1,x2,y2` format. Repeat flag for multiple boxes. |
+| `--weak-labels-csv` | file path | no | `None` | Weak-label CSV from `label weak` containing tile-local bboxes. |
+| `--help` | flag | no | - | Show help and exit. |
+
+Examples:
+
+```bash
+pixi run satellit -- label by-bounding-boxes \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --output-path output/predict \
+  --tile-size 2048 \
+  --overlap 64
+```
+
+```bash
+pixi run satellit -- label by-bounding-boxes \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --weak-labels-csv output/inventory_from_shp/labels_tiles.csv
 ```

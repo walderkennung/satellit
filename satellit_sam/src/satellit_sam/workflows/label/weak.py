@@ -18,14 +18,14 @@ import cv2
 import numpy as np
 from osgeo import gdal, ogr, osr
 
-from src.satellit_sam.core.allometry import (
+from satellit_sam.core.allometry import (
     CrownModel,
     DbhUnit,
     compute_crown_radius_m,
 )
-from src.satellit_sam.core.geotiff import GeoTiffMeta
-from src.satellit_sam.core.inventory import Inventory
-from src.satellit_sam.core.tree import Tree
+from satellit_sam.core.geotiff import GeoTiffMeta
+from satellit_sam.core.inventory import Inventory
+from satellit_sam.core.tree import Tree
 
 
 def make_weak_labels(
