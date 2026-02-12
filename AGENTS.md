@@ -43,6 +43,13 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 - Add one protocol document per investigation/experiment and keep it complete enough to reproduce the work.
 - If you think that something is important to be documented propose a change to the documentation.
 
+### Python Docstrings
+
+- Use Google-style docstrings for Python code.
+- Include type hints in function signatures where possible.
+- Document parameters, return values, and exceptions in docstrings.
+- For complex functions, include a brief example in the docstring.
+
 ## Validation
 
 - Run the smallest meaningful check for the change.
