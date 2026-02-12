@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import yaml
 from osgeo import osr
 
 from src.satellit_sam.core.allometry import (
@@ -293,19 +294,25 @@ def _spatial_reference_from_wkt(wkt: str) -> osr.SpatialReference:
 
 def write_yaml(tiles: list[dict[str, Any]], yaml_path: Path) -> None:
     """Write weak labels to YAML in the documented structure."""
-    lines: list[str] = ["tiles:"]
+    payload_tiles: list[dict[str, Any]] = []
     for tile in tiles:
-        tile_id = str(tile["tile_id"])
-        trees = tile["trees"]
-        lines.append(f'  - tile_id: "{tile_id}"')
-        if not trees:
-            lines.append("    trees: []")
-            continue
+        payload_trees = [
+            {
+                "x_pixel": int(tree["x_pixel"]),
+                "y_pixel": int(tree["y_pixel"]),
+                "crown_radius": round(float(tree["crown_radius"]), 3),
+            }
+            for tree in tile["trees"]
+        ]
+        payload_tiles.append(
+            {
+                "tile_id": str(tile["tile_id"]),
+                "trees": payload_trees,
+            }
+        )
 
-        lines.append("    trees:")
-        for tree in trees:
-            lines.append(f"      - x_pixel: {int(tree['x_pixel'])}")
-            lines.append(f"        y_pixel: {int(tree['y_pixel'])}")
-            lines.append(f"        crown_radius: {float(tree['crown_radius']):.3f}")
-
-    yaml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    payload = {"tiles": payload_tiles}
+    yaml_path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, allow_unicode=False),
+        encoding="utf-8",
+    )
