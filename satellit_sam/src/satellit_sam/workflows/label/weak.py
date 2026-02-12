@@ -14,7 +14,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from osgeo import ogr, osr
+import cv2
+import numpy as np
+from osgeo import gdal, ogr, osr
 
 from src.satellit_sam.core.allometry import (
     CrownModel,
@@ -129,6 +131,7 @@ def make_weak_labels(
         overlap=tile_overlap,
     )
     meter_to_px = _meter_to_pixel_scale(meta=meta)
+    projected_trees: list[dict[str, float]] = []
 
     for tree in inventory.trees:
         image_x, image_y = _wgs84_tree_to_pixel(
@@ -158,6 +161,13 @@ def make_weak_labels(
         else:
             crown_radius_m = max(default_crown_radius_m, min_crown_radius_m)
         crown_radius_px = crown_radius_m * meter_to_px
+        projected_trees.append(
+            {
+                "x_global": image_x,
+                "y_global": image_y,
+                "crown_radius_px": crown_radius_px,
+            }
+        )
 
         for tile in tiles:
             if not _circle_intersects_rect(
@@ -202,10 +212,27 @@ def make_weak_labels(
     if legacy_yaml_path.exists():
         legacy_yaml_path.unlink()
 
+    visualization_outputs: dict[str, str] = {}
     if export_visualizations:
-        print("`export_visualizations` is not implemented in this workflow yet.")
+        visualization_tiles = [tile for tile in tiles if (tile["trees"])]
+        if not only_non_empty_tiles:
+            visualization_tiles = tiles
+        visualization_outputs = export_visualizations_opencv(
+            image_tif=image_tif,
+            output_dir=output_dir,
+            projected_trees=projected_trees,
+            tiles=visualization_tiles,
+        )
     print(f"Weak labels written: {csv_path}")
     print(f"Weak labels written: {shp_path}")
+    if visualization_outputs:
+        print(
+            f"Weak labeling visualization (crowns): {visualization_outputs['visualization_crowns']}"
+        )
+        print(
+            "Weak labeling visualization (crowns+tiles): "
+            + visualization_outputs["visualization_crowns_tiles"]
+        )
 
 
 def _build_tiles(width: int, height: int, tile_size: int, overlap: int) -> list[dict]:
@@ -454,3 +481,169 @@ def _iter_label_rows(tiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
             )
     return rows
+
+
+def export_visualizations_opencv(
+    image_tif: Path,
+    output_dir: Path,
+    projected_trees: list[dict[str, float]],
+    tiles: list[dict[str, Any]],
+    max_dimension: int = 2400,
+    crown_stroke_width: int = 1,
+    center_radius: int = 2,
+) -> dict[str, str]:
+    """Render weak-label visualization overlays using OpenCV."""
+    base_bgr = _load_tif_for_visualization(image_tif=image_tif)
+    original_height, original_width = base_bgr.shape[:2]
+    scale = 1.0
+    if max(original_width, original_height) > max_dimension:
+        scale = float(max_dimension) / float(max(original_width, original_height))
+
+    if scale < 1.0:
+        preview = cv2.resize(
+            base_bgr,
+            dsize=(int(round(original_width * scale)), int(round(original_height * scale))),
+            interpolation=cv2.INTER_AREA,
+        )
+    else:
+        preview = base_bgr
+
+    crowns = preview.copy()
+    crowns_tiles = preview.copy()
+
+    for tree in projected_trees:
+        x = int(round(tree["x_global"] * scale))
+        y = int(round(tree["y_global"] * scale))
+        radius = max(1, int(round(tree["crown_radius_px"] * scale)))
+        cv2.circle(
+            crowns,
+            center=(x, y),
+            radius=radius,
+            color=(0, 0, 255),
+            thickness=max(1, crown_stroke_width),
+            lineType=cv2.LINE_AA,
+        )
+        cv2.circle(
+            crowns,
+            center=(x, y),
+            radius=max(1, center_radius),
+            color=(0, 255, 255),
+            thickness=-1,
+            lineType=cv2.LINE_AA,
+        )
+        cv2.circle(
+            crowns_tiles,
+            center=(x, y),
+            radius=radius,
+            color=(0, 0, 255),
+            thickness=max(1, crown_stroke_width),
+            lineType=cv2.LINE_AA,
+        )
+        cv2.circle(
+            crowns_tiles,
+            center=(x, y),
+            radius=max(1, center_radius),
+            color=(0, 255, 255),
+            thickness=-1,
+            lineType=cv2.LINE_AA,
+        )
+
+    for tile in tiles:
+        x0 = int(round(float(tile["x0"]) * scale))
+        y0 = int(round(float(tile["y0"]) * scale))
+        x1 = int(round(float(tile["x1"]) * scale))
+        y1 = int(round(float(tile["y1"]) * scale))
+        cv2.rectangle(
+            crowns_tiles,
+            pt1=(x0, y0),
+            pt2=(x1, y1),
+            color=(255, 255, 0),
+            thickness=1,
+            lineType=cv2.LINE_AA,
+        )
+
+    viz_dir = output_dir / "visualizations"
+    viz_dir.mkdir(parents=True, exist_ok=True)
+    base_path = viz_dir / "base.tif"
+    crowns_path = viz_dir / "labels_crowns.tif"
+    crowns_tiles_path = viz_dir / "labels_crowns_tiles.tif"
+    for legacy_png in (
+        viz_dir / "base.png",
+        viz_dir / "labels_crowns.png",
+        viz_dir / "labels_crowns_tiles.png",
+    ):
+        if legacy_png.exists():
+            legacy_png.unlink()
+
+    _write_lossless_tiff(path=base_path, image=preview)
+    _write_lossless_tiff(path=crowns_path, image=crowns)
+    _write_lossless_tiff(path=crowns_tiles_path, image=crowns_tiles)
+
+    return {
+        "visualization_base": str(base_path),
+        "visualization_crowns": str(crowns_path),
+        "visualization_crowns_tiles": str(crowns_tiles_path),
+    }
+
+
+def _load_tif_for_visualization(image_tif: Path) -> np.ndarray:
+    """Load a GeoTIFF into an 8-bit BGR image for OpenCV rendering."""
+    dataset = gdal.Open(str(image_tif), gdal.GA_ReadOnly)
+    if dataset is not None:
+        try:
+            width = dataset.RasterXSize
+            height = dataset.RasterYSize
+            band_count = dataset.RasterCount
+            if band_count <= 0:
+                raise ValueError(f"GeoTIFF has no raster bands: {image_tif}")
+
+            if band_count >= 3:
+                red = dataset.GetRasterBand(1).ReadAsArray(0, 0, width, height)
+                green = dataset.GetRasterBand(2).ReadAsArray(0, 0, width, height)
+                blue = dataset.GetRasterBand(3).ReadAsArray(0, 0, width, height)
+                rgb = np.dstack([red, green, blue])
+            else:
+                gray = dataset.GetRasterBand(1).ReadAsArray(0, 0, width, height)
+                rgb = np.dstack([gray, gray, gray])
+        finally:
+            dataset = None
+
+        rgb_uint8 = _to_uint8_image(image=rgb)
+        return cv2.cvtColor(rgb_uint8, cv2.COLOR_RGB2BGR)
+
+    image = cv2.imread(str(image_tif), cv2.IMREAD_COLOR)
+    if image is not None:
+        return image
+    raise FileNotFoundError(f"Could not open image for visualization: {image_tif}")
+
+
+def _to_uint8_image(image: np.ndarray) -> np.ndarray:
+    """Convert arbitrary numeric image data to uint8 using min-max normalization."""
+    if image.dtype == np.uint8:
+        return image
+
+    data = image.astype(np.float32)
+    finite = np.isfinite(data)
+    if not np.any(finite):
+        return np.zeros_like(data, dtype=np.uint8)
+
+    min_value = float(np.min(data[finite]))
+    max_value = float(np.max(data[finite]))
+    if max_value <= min_value:
+        return np.zeros_like(data, dtype=np.uint8)
+
+    normalized = (data - min_value) / (max_value - min_value)
+    normalized = np.clip(normalized * 255.0, 0.0, 255.0)
+    return normalized.astype(np.uint8)
+
+
+def _write_lossless_tiff(path: Path, image: np.ndarray) -> None:
+    """Write image as lossless TIFF (LZW when supported)."""
+    compression_flag = getattr(cv2, "IMWRITE_TIFF_COMPRESSION", None)
+    if compression_flag is None:
+        ok = cv2.imwrite(str(path), image)
+    else:
+        # 5 = LZW compression for TIFF (lossless).
+        ok = cv2.imwrite(str(path), image, [compression_flag, 5])
+    if not ok:
+        raise RuntimeError(f"Failed to write visualization image: {path}")
