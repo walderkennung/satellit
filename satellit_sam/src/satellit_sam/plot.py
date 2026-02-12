@@ -25,6 +25,14 @@ COLOR = sv.ColorPalette.from_hex(
 
 
 def from_sam(sam_result: dict) -> sv.Detections:
+    """Convert a SAM post-processing result to ``supervision`` detections.
+
+    Args:
+        sam_result: Dictionary returned by SAM post-processing utilities.
+
+    Returns:
+        Structured detections with masks, boxes, and confidence scores.
+    """
     if len(sam_result["masks"]) == 0:
         return sv.Detections.empty()
 
@@ -39,6 +47,16 @@ def from_sam(sam_result: dict) -> sv.Detections:
 def annotate(
     image: Image, detections: sv.Detections, label: Optional[str] = None
 ) -> Image:
+    """Draw masks, boxes, and optional labels on top of an image.
+
+    Args:
+        image: Source image.
+        detections: Detection outputs to render.
+        label: Optional class/prompt prefix used in rendered text labels.
+
+    Returns:
+        Annotated image copy.
+    """
     text_scale = sv.calculate_optimal_text_scale(resolution_wh=image.size)
 
     mask_annotator = sv.MaskAnnotator(

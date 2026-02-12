@@ -10,6 +10,8 @@ gdal.UseExceptions()
 
 @dataclass
 class Image:
+    """In-memory image wrapper used throughout the CLI workflows."""
+
     size: tuple[int, int]  # (width, height)
     channels: int
     data: np.ndarray
@@ -19,7 +21,11 @@ class Image:
         return Image(size=self.size, channels=self.channels, data=self.data.copy())
 
     def save(self, path: str) -> None:
-        """Save the image to the specified path."""
+        """Save the image to disk.
+
+        Args:
+            path: Destination image path.
+        """
         if self.channels == 4:
             cv2.imwrite(path, cv2.cvtColor(self.data, cv2.COLOR_RGBA2BGRA))
         elif self.channels == 3:
@@ -29,7 +35,17 @@ class Image:
 
     @staticmethod
     def load(path: str) -> "Image":
-        """Load an image from the specified path."""
+        """Load an image from disk.
+
+        Args:
+            path: Source path for the image file.
+
+        Returns:
+            Loaded image object.
+
+        Raises:
+            FileNotFoundError: If OpenCV cannot read the file.
+        """
         path_obj = Path(path)
         if path_obj.suffix.lower() in {".tif", ".tiff"}:
             gdal_image = _load_tiff_with_gdal(path_obj)
@@ -58,14 +74,31 @@ class Image:
         return Image(size=(width, height), channels=channels, data=data)
 
     def crop(self, start_x: int, start_y: int, end_x: int, end_y: int) -> "Image":
-        """Crop the image to the specified rectangle."""
+        """Create a cropped view from pixel bounds.
+
+        Args:
+            start_x: Inclusive start x-coordinate.
+            start_y: Inclusive start y-coordinate.
+            end_x: Exclusive end x-coordinate.
+            end_y: Exclusive end y-coordinate.
+
+        Returns:
+            Cropped image.
+        """
         cropped_data = self.data[start_y:end_y, start_x:end_x]
         height, width, channels = cropped_data.shape
         return Image(size=(width, height), channels=channels, data=cropped_data)
 
 
 def _load_tiff_with_gdal(path: Path) -> Image | None:
-    """Load a TIFF image through GDAL to support very large rasters."""
+    """Load a TIFF image through GDAL to support very large rasters.
+
+    Args:
+        path: TIFF path.
+
+    Returns:
+        Loaded image, or ``None`` if GDAL could not open the raster.
+    """
     dataset = gdal.Open(str(path), gdal.GA_ReadOnly)
     if dataset is None:
         return None

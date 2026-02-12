@@ -7,7 +7,10 @@ from satellit_sam.plot import annotate, from_sam
 
 
 class SamSingleton:
+    """Singleton wrapper for loading and running the SAM3 model."""
+
     def __init__(self):
+        """Initialize model, processor, and device-specific settings."""
         if torch.cuda.is_available():
             torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
 
@@ -23,6 +26,7 @@ class SamSingleton:
         self.processor = Sam3Processor.from_pretrained("facebook/sam3")
 
     def print_debug_info(self):
+        """Print runtime versions and CUDA availability for diagnostics."""
         print("PyTorch version:", torch.__version__)
         print("Torchvision version:", torchvision.__version__)
         print("CUDA is available:", torch.cuda.is_available())
@@ -36,6 +40,22 @@ class SamSingleton:
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
     ) -> Image:
+        """Generate and render segmentation predictions for one image.
+
+        Args:
+            image: Image to segment.
+            text: Optional text prompt.
+            boxes: Optional list of box prompts in ``x1,y1,x2,y2`` format.
+            box_labels: Optional per-box labels for the SAM processor.
+            threshold: Score threshold used in SAM post-processing.
+            mask_threshold: Pixel mask threshold used in SAM post-processing.
+
+        Returns:
+            Annotated image with segmentation overlays.
+
+        Raises:
+            ValueError: If neither text nor box prompts are provided.
+        """
         if text is None and not boxes:
             raise ValueError("At least one prompt is required: text and/or boxes.")
 

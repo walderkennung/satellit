@@ -22,6 +22,17 @@ def predict_masks(
     weak_label_bboxes_by_tile: dict[str, list[tuple[float, float, float, float]]]
     | None = None,
 ) -> None:
+    """Run tiled prediction using sync entrypoint.
+
+    Args:
+        image_path: Path to the source image.
+        tile_size: Tile width/height in pixels.
+        overlap: Tile overlap in pixels.
+        output_path: Directory where outputs are written.
+        text_prompt: Optional text prompt for SAM.
+        bbox_prompts: Image-space box prompts.
+        weak_label_bboxes_by_tile: Optional tile-local boxes from weak labels.
+    """
     asyncio.run(
         predict_masks_async(
             image_path=image_path,
@@ -45,6 +56,17 @@ async def predict_masks_async(
     weak_label_bboxes_by_tile: dict[str, list[tuple[float, float, float, float]]]
     | None = None,
 ) -> None:
+    """Run tiled SAM prediction workflow asynchronously.
+
+    Args:
+        image_path: Path to the source image.
+        tile_size: Tile width/height in pixels.
+        overlap: Tile overlap in pixels.
+        output_path: Directory where outputs are written.
+        text_prompt: Optional text prompt for SAM.
+        bbox_prompts: Image-space box prompts.
+        weak_label_bboxes_by_tile: Optional tile-local boxes from weak labels.
+    """
     from .sam3 import sam
 
     sam.print_debug_info()
@@ -128,6 +150,11 @@ async def predict_masks_async(
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Run the CLI root command.
+
+    Args:
+        argv: Optional argument list for programmatic invocation.
+    """
     from .cli import main as cli_main
 
     cli_main(argv)

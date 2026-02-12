@@ -1,17 +1,26 @@
+"""Download Segment Anything model checkpoints used by local experiments."""
+
 import os
 import sys
 
 import requests
 import tqdm
 
-model_checkpoints = [
+MODEL_CHECKPOINTS = [
     "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth",
     "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth",
     "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
 ]
 
 
-def download_file(url: str, filename: str, with_progress: bool = True):
+def download_file(url: str, filename: str, with_progress: bool = True) -> None:
+    """Download one file to disk.
+
+    Args:
+        url: Source URL.
+        filename: Destination file path.
+        with_progress: Whether to render a progress bar.
+    """
     with open(filename, "wb") as file_handle:
         with requests.get(url, stream=True) as req:
             total_size = int(req.headers.get("content-length", 0))
@@ -33,11 +42,16 @@ def download_file(url: str, filename: str, with_progress: bool = True):
                 print("ERROR, something went wrong")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Download all configured model checkpoints into a model directory."""
     model_dir = sys.argv[1] if len(sys.argv) > 1 else "models/sam"
 
     os.makedirs(model_dir, exist_ok=True)
 
-    for url in model_checkpoints:
+    for url in MODEL_CHECKPOINTS:
         filename = os.path.join(model_dir, url.split("/")[-1])
         download_file(url, filename)
+
+
+if __name__ == "__main__":
+    main()

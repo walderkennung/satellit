@@ -8,6 +8,8 @@ gdal.UseExceptions()
 
 @dataclass
 class GeoTiffMeta:
+    """Metadata needed for mapping inventory points into raster pixel space."""
+
     width: int
     height: int
     origin_x: float
@@ -19,6 +21,18 @@ class GeoTiffMeta:
 
     @staticmethod
     def load_tif(tif_path: Path) -> "GeoTiffMeta":
+        """Load GeoTIFF metadata from disk.
+
+        Args:
+            tif_path: Path to a GeoTIFF raster.
+
+        Returns:
+            Parsed geospatial metadata for the raster.
+
+        Raises:
+            FileNotFoundError: If the file cannot be opened by GDAL.
+            ValueError: If the raster does not provide geotransform metadata.
+        """
         dataset = gdal.Open(str(tif_path), gdal.GA_ReadOnly)
         if dataset is None:
             raise FileNotFoundError(f"Could not open GeoTIFF: {tif_path}")
