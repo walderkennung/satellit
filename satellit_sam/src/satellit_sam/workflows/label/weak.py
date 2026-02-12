@@ -53,7 +53,6 @@ def make_weak_labels(
     power_b: float = 0.8,
     min_crown_radius_m: float = 0.5,
     max_crown_radius_m: float = 15.0,
-    only_non_empty_tiles: bool = False,
 ) -> None:
     """Generate tile-wise weak labels and write them to ``labels_tiles.csv``.
 
@@ -186,7 +185,7 @@ def make_weak_labels(
 
     tiles_payload: list[dict[str, Any]] = []
     for tile in tiles:
-        if only_non_empty_tiles and not tile["trees"]:
+        if not tile["trees"]:
             continue
         tiles_payload.append(
             {

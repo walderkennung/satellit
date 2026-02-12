@@ -41,14 +41,6 @@ def weak(
         int,
         typer.Option("--overlap", help="Tile overlap in px."),
     ] = 128,
-    only_non_empty_tiles: Annotated[
-        bool,
-        typer.Option(
-            "--only-non-empty-tiles",
-            is_flag=True,
-            help="Write only tiles that contain at least one tree.",
-        ),
-    ] = False,
     x_field: Annotated[
         str,
         typer.Option(
@@ -203,7 +195,6 @@ def weak(
         power_b=power_b,
         min_crown_radius_m=min_crown_radius_m,
         max_crown_radius_m=max_crown_radius_m,
-        only_non_empty_tiles=only_non_empty_tiles,
     )
 
 
