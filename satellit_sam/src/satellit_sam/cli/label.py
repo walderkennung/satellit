@@ -148,6 +148,13 @@ def weak(
         float,
         typer.Option("--max-crown-radius-m", help="Upper clamp for crown radius."),
     ] = 15.0,
+    bbox_padding_px: Annotated[
+        float,
+        typer.Option(
+            "--bbox-padding-px",
+            help="Extra padding (in px) added to each weak-label crown bbox.",
+        ),
+    ] = 4.0,
     export_visualizations: Annotated[
         bool,
         typer.Option(
@@ -195,6 +202,7 @@ def weak(
         power_b=power_b,
         min_crown_radius_m=min_crown_radius_m,
         max_crown_radius_m=max_crown_radius_m,
+        bbox_padding_px=bbox_padding_px,
     )
 
 

@@ -2,7 +2,7 @@
 
 The resulting CSV file has the form:
 ```csv
-tile_id,tree_id,x_pixel,y_pixel,crown_radius,x_long_wgs84,y_lat_wgs84,dbh_cm
+tile_id,tree_id,x_pixel,y_pixel,crown_radius,bbox_x1,bbox_y1,bbox_x2,bbox_y2,x_long_wgs84,y_lat_wgs84,dbh_cm
 ```
 The same rows are also exported as a point shapefile (`labels_tiles.shp`).
 """
@@ -55,6 +55,7 @@ def make_weak_labels(
     power_b: float = 0.8,
     min_crown_radius_m: float = 0.5,
     max_crown_radius_m: float = 15.0,
+    bbox_padding_px: float = 4.0,
 ) -> None:
     """Generate tile-wise weak labels and write them to ``labels_tiles.csv``.
 
@@ -75,6 +76,8 @@ def make_weak_labels(
         raise ValueError("`tile_size` must be > 0.")
     if tile_overlap < 0 or tile_overlap >= tile_size:
         raise ValueError("`tile_overlap` must be >= 0 and < `tile_size`.")
+    if bbox_padding_px < 0.0:
+        raise ValueError("`bbox_padding_px` must be >= 0.")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     meta = GeoTiffMeta.load_tif(image_tif)
@@ -181,12 +184,29 @@ def make_weak_labels(
             ):
                 continue
 
+            tile_center_x = image_x - tile["x0"]
+            tile_center_y = image_y - tile["y0"]
+            tile_width = tile["x1"] - tile["x0"]
+            tile_height = tile["y1"] - tile["y0"]
+            bbox_x1, bbox_y1, bbox_x2, bbox_y2 = _crown_bbox_in_tile(
+                center_x=tile_center_x,
+                center_y=tile_center_y,
+                crown_radius_px=crown_radius_px,
+                tile_width=tile_width,
+                tile_height=tile_height,
+                padding_px=bbox_padding_px,
+            )
+
             tile["trees"].append(
                 {
                     "tree_id": tree.tree_id,
-                    "x_pixel": int(round(image_x - tile["x0"])),
-                    "y_pixel": int(round(image_y - tile["y0"])),
+                    "x_pixel": int(round(tile_center_x)),
+                    "y_pixel": int(round(tile_center_y)),
                     "crown_radius": round(crown_radius_px, 3),
+                    "bbox_x1": round(bbox_x1, 3),
+                    "bbox_y1": round(bbox_y1, 3),
+                    "bbox_x2": round(bbox_x2, 3),
+                    "bbox_y2": round(bbox_y2, 3),
                     "x_long_wgs84": round(tree.x_wgs84, 9),
                     "y_lat_wgs84": round(tree.y_wgs84, 9),
                     "dbh_cm": round(tree.dbh_cm, 3),
@@ -269,6 +289,35 @@ def _circle_intersects_rect(
     dx = center_x - nearest_x
     dy = center_y - nearest_y
     return (dx * dx + dy * dy) <= (radius * radius)
+
+
+def _crown_bbox_in_tile(
+    center_x: float,
+    center_y: float,
+    crown_radius_px: float,
+    tile_width: int,
+    tile_height: int,
+    padding_px: float,
+) -> tuple[float, float, float, float]:
+    padded_radius = max(0.0, crown_radius_px + padding_px)
+    x1 = max(0.0, center_x - padded_radius)
+    y1 = max(0.0, center_y - padded_radius)
+    x2 = min(float(tile_width), center_x + padded_radius)
+    y2 = min(float(tile_height), center_y + padded_radius)
+
+    # Keep SAM prompts valid even for edge-touching labels.
+    if x2 <= x1:
+        x_center = min(max(center_x, 0.0), float(tile_width))
+        x1 = max(0.0, x_center - 0.5)
+        x2 = min(float(tile_width), x_center + 0.5)
+    if y2 <= y1:
+        y_center = min(max(center_y, 0.0), float(tile_height))
+        y1 = max(0.0, y_center - 0.5)
+        y2 = min(float(tile_height), y_center + 0.5)
+
+    if x2 <= x1 or y2 <= y1:
+        raise ValueError("Could not derive a valid bbox for weak label.")
+    return x1, y1, x2, y2
 
 
 def _meter_to_pixel_scale(meta: GeoTiffMeta) -> float:
@@ -378,6 +427,10 @@ def write_csv(tiles: list[dict[str, Any]], csv_path: Path) -> None:
                 "x_pixel",
                 "y_pixel",
                 "crown_radius",
+                "bbox_x1",
+                "bbox_y1",
+                "bbox_x2",
+                "bbox_y2",
                 "x_long_wgs84",
                 "y_lat_wgs84",
                 "dbh_cm",
@@ -392,6 +445,10 @@ def write_csv(tiles: list[dict[str, Any]], csv_path: Path) -> None:
                     row["x_pixel"],
                     row["y_pixel"],
                     row["crown_radius"],
+                    row["bbox_x1"],
+                    row["bbox_y1"],
+                    row["bbox_x2"],
+                    row["bbox_y2"],
                     row["x_long_wgs84"],
                     row["y_lat_wgs84"],
                     row["dbh_cm"],
@@ -427,6 +484,10 @@ def write_shapefile(tiles: list[dict[str, Any]], shp_path: Path) -> None:
             feature.SetField("x_pixel", row["x_pixel"])
             feature.SetField("y_pixel", row["y_pixel"])
             feature.SetField("crown_px", row["crown_radius"])
+            feature.SetField("bbox_x1", row["bbox_x1"])
+            feature.SetField("bbox_y1", row["bbox_y1"])
+            feature.SetField("bbox_x2", row["bbox_x2"])
+            feature.SetField("bbox_y2", row["bbox_y2"])
             feature.SetField("x_long", row["x_long_wgs84"])
             feature.SetField("y_lat", row["y_lat_wgs84"])
             feature.SetField("dbh_cm", row["dbh_cm"])
@@ -449,6 +510,10 @@ def _create_shapefile_fields(layer: ogr.Layer) -> None:
         ("x_pixel", ogr.OFTInteger, 0, 0),
         ("y_pixel", ogr.OFTInteger, 0, 0),
         ("crown_px", ogr.OFTReal, 12, 3),
+        ("bbox_x1", ogr.OFTReal, 12, 3),
+        ("bbox_y1", ogr.OFTReal, 12, 3),
+        ("bbox_x2", ogr.OFTReal, 12, 3),
+        ("bbox_y2", ogr.OFTReal, 12, 3),
         ("x_long", ogr.OFTReal, 18, 9),
         ("y_lat", ogr.OFTReal, 18, 9),
         ("dbh_cm", ogr.OFTReal, 10, 3),
@@ -475,6 +540,10 @@ def _iter_label_rows(tiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "x_pixel": int(tree["x_pixel"]),
                     "y_pixel": int(tree["y_pixel"]),
                     "crown_radius": round(float(tree["crown_radius"]), 3),
+                    "bbox_x1": round(float(tree["bbox_x1"]), 3),
+                    "bbox_y1": round(float(tree["bbox_y1"]), 3),
+                    "bbox_x2": round(float(tree["bbox_x2"]), 3),
+                    "bbox_y2": round(float(tree["bbox_y2"]), 3),
                     "x_long_wgs84": float(tree["x_long_wgs84"]),
                     "y_lat_wgs84": float(tree["y_lat_wgs84"]),
                     "dbh_cm": float(tree["dbh_cm"]),
@@ -502,7 +571,10 @@ def export_visualizations_opencv(
     if scale < 1.0:
         preview = cv2.resize(
             base_bgr,
-            dsize=(int(round(original_width * scale)), int(round(original_height * scale))),
+            dsize=(
+                int(round(original_width * scale)),
+                int(round(original_height * scale)),
+            ),
             interpolation=cv2.INTER_AREA,
         )
     else:

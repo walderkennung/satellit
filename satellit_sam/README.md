@@ -77,6 +77,7 @@ Notes:
 
 - If neither `--text-prompt` nor `--bbox` is provided, the prompt defaults to `trees`.
 - If only `--bbox` is provided, segmentation runs from box prompts without a text prompt.
+- `--weak-labels-csv` can load per-tree tile-local bboxes from `label weak` output (`labels_tiles.csv`).
 
 ### `label weak`
 
@@ -101,9 +102,8 @@ Rules:
 
 Generated outputs include:
 
-- `labels_tiles.yaml` and `labels_tiles.json`
-- `trees_projected.csv`
-- `summary.json`
+- `labels_tiles.csv` (flat weak-label rows with `bbox_x1,bbox_y1,bbox_x2,bbox_y2`)
+- `labels_tiles.shp` (WGS84 points with bbox attributes)
 - optional visualization PNGs under `visualizations/`
 
 ## Full Command Reference
