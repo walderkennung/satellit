@@ -5,8 +5,7 @@ channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
 platforms = ["osx-arm64", "linux-64"]
 
 [tasks]
-predict-masks = "python -m satellit_sam.main"
-generate-weak-labels = "python -m satellit_sam.main generate-inventory-weak-labels"
+satellit = "python -m satellit_sam.main"
 sam-download = "python scripts/download_sam.py"
 sam-test = "python scripts/test_sam.py"
 test = "pytest tests/ -v --cov=satellit_sam --cov-report=term-missing"
