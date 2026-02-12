@@ -31,6 +31,8 @@ jobs:
 
       - name: Setup Pixi
         uses: prefix-dev/setup-pixi@v0.8.14
+        with:
+          run-install: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
