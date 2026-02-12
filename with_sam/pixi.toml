@@ -6,28 +6,32 @@ platforms = ["osx-arm64", "linux-64"]
 
 [tasks]
 predict-masks = "python -m satellit_sam.main"
+generate-weak-labels = "python -m satellit_sam.main generate-inventory-weak-labels"
 sam-download = "python scripts/download_sam.py"
 sam-test = "python scripts/test_sam.py"
 test = "pytest tests/ -v --cov=satellit_sam --cov-report=term-missing"
 
 [dependencies]
-ipykernel = ">=7.1.0,<8"
-tqdm = ">=4.67.1,<5"
+ipykernel = ">=7.2.0,<8"
+tqdm = ">=4.67.3,<5"
 requests = ">=2.32.5,<3"
 pycocotools = ">=2.0.11,<3"
 matplotlib = ">=3.10.8,<4"
 onnxruntime = ">=1.22.2,<2"
-onnx = ">=1.19.1,<2"
-opencv = ">=4.12.0,<5"
-numpy = ">=2.3.5,<3"
-pip = ">=25.3,<26"
-ultralytics = ">=8.3.239,<9"
+onnx = ">=1.20.0,<2"
+opencv = ">=4.13.0,<5"
+numpy = ">=2.4.2,<3"
+pip = ">=26.0.1,<27"
+ultralytics = ">=8.4.14,<9"
 pytest = ">=9.0.2,<10"
 pytest-cov = ">=7.0.0,<8"
-scikit-image = ">=0.24.0,<1"
+scikit-image = ">=0.26.0,<0.27"
 supervision = ">=0.25.1,<0.26"
-typer = ">=0.9.0,<1"
+typer = ">=0.23.0,<0.24"
 laspy = ">=2.7.0,<3"
+gdal = ">=3.12.2,<4"
+pyproj = ">=3.7.2,<4"
+ruff = ">=0.14.0,<0.15"
 
 [pypi-dependencies]
 python-base = { git = "https://github.com/walderkennung/python-base.git" }
