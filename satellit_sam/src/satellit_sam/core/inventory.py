@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Literal
 
 from osgeo import gdal, ogr, osr
+
+gdal.UseExceptions()
 from pyproj import Geod
 
 from src.satellit_sam.core.allometry import DbhUnit, to_dbh_cm
