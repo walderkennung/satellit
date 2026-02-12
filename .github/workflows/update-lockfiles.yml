@@ -21,7 +21,7 @@ jobs:
       - name: Update lockfiles
         run: |
           set -o pipefail
-          cd with_sam
+          cd satellit_sam
           pixi update --json | pixi exec pixi diff-to-markdown >> ../diff.md
       - name: Create pull request
         uses: peter-evans/create-pull-request@v8
@@ -34,4 +34,4 @@ jobs:
           base: main
           labels: pixi
           delete-branch: true
-          add-paths: with_sam/pixi.lock
+          add-paths: satellit_sam/pixi.lock

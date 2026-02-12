@@ -9,7 +9,7 @@ Requires Python 3.10+ and `ruff` for signature formatting.
 
 Arguments:
     --package-name: Python package name used in module paths (default: "satellit_sam").
-    --source-dir: Directory containing Python package source files (default: "./with_sam/src/satellit_sam").
+    --source-dir: Directory containing Python package source files (default: "./satellit_sam/src/satellit_sam").
     --output-dir: Output directory for generated Markdown files (default: "./docs/content/api").
     --content-dir: Docmd content root directory used to compute site routes (default: "./docs/content").
 """
@@ -534,7 +534,7 @@ def write_module_page(
         "",
         f"# `{module.name}`",
         "",
-        f"> Auto-generated from `{source_display}` by `with_sam/scripts/generate_api_docs.py`.",
+        f"> Auto-generated from `{source_display}` by `satellit_sam/scripts/generate_api_docs.py`.",
         "",
         f"[Back to API index]({back_link})",
         "",
@@ -605,7 +605,7 @@ def write_index(
         "",
         "# Python API Reference",
         "",
-        "These pages are auto-generated from `with_sam/src/satellit_sam`.",
+        "These pages are auto-generated from `satellit_sam/src/satellit_sam`.",
         "",
         "## Modules",
         "",
@@ -652,7 +652,7 @@ def main() -> None:
     parser.add_argument(
         "--source-dir",
         type=Path,
-        default=Path("./with_sam/src/satellit_sam"),
+        default=Path("./satellit_sam/src/satellit_sam"),
         help="Directory containing Python package source files.",
     )
     parser.add_argument(

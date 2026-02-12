@@ -360,7 +360,7 @@ pixi run pytest tests/test_heightmap.py -v
 Run example scripts:
 
 ```bash
-cd with_sam
+cd satellit_sam
 pixi run python examples/heightmap_example.py
 ```
 

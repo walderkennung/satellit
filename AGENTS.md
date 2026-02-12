@@ -10,8 +10,8 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 
 - Applies to the entire repository rooted at this directory.
 - Prefer small, focused changes over broad refactors.
-- `with_sam` is a separate Pixi project.
-- All work related to Segment Anything Model (SAM) must be placed in `with_sam`.
+- `satellit_sam` is a separate Pixi project.
+- All work related to Segment Anything Model (SAM) must be placed in `satellit_sam`.
 
 ## Workflow
 
@@ -32,7 +32,7 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 - Use Pixi for SAM/project code commands in this repository.
 - Do not run tools directly with global/system binaries (for example `python`, `pip`, `pytest`) when a Pixi-based invocation is possible.
 - Run commands via `pixi run ...` from the relevant project directory.
-- The only Pixi project currently in the repo is `with_sam` (SAM work).
+- The only Pixi project currently in the repo is `satellit_sam` (SAM work).
 - Install or sync dependencies with Pixi only.
 - Documentation site commands are run from `docs/` using `bun`
 
@@ -58,8 +58,8 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 
 ## Notes
 
-- `with_sam` has its own Pixi configuration and should be treated as the home for SAM-specific code and workflows.
-- `with_sam` Pixi tasks (run from `with_sam/`):
+- `satellit_sam` has its own Pixi configuration and should be treated as the home for SAM-specific code and workflows.
+- `satellit_sam` Pixi tasks (run from `satellit_sam/`):
 - `pixi run satellit` (run main satellit CLI)
 - `pixi run sam-download` (download SAM checkpoints)
 - `pixi run sam-test` (validate SAM setup)
@@ -69,5 +69,5 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 - `bun run gen:api` (generate API docs via Pixi task)
 - `bun run dev` (generate API docs, then run docmd dev server)
 - `bun run build` (generate API docs, then build static site)
-- GitHub Pages deployment workflow: `.github/workflows/docs-pages.yml` builds and deploys docs on pushes to `main` that touch `docs/**`, `scripts/generate_api_docs.py`, or `with_sam/src/satellit_sam/**`.
+- GitHub Pages deployment workflow: `.github/workflows/docs-pages.yml` builds and deploys docs on pushes to `main` that touch `docs/**`, `scripts/generate_api_docs.py`, or `satellit_sam/src/satellit_sam/**`.
 - If you add repeatable checks, document runnable commands here.
