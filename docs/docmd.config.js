@@ -46,7 +46,7 @@ const apiNavigationChildren = getApiNavigationChildren();
 module.exports = {
   // --- Core Metadata ---
   siteTitle: 'Walderkennung Satellit Documentation',
-  siteUrl: '', // e.g. https://mysite.com (Critical for SEO/Sitemap)
+  siteUrl: 'https://walderkennung.github.io/satellit', // Critical for SEO/Sitemap
 
   // --- Branding ---
   logo: {

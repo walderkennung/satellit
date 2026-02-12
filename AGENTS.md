@@ -69,4 +69,5 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 - `bun run gen:api` (generate API docs via Pixi task)
 - `bun run dev` (generate API docs, then run docmd dev server)
 - `bun run build` (generate API docs, then build static site)
+- GitHub Pages deployment workflow: `.github/workflows/docs-pages.yml` builds and deploys docs on pushes to `main` that touch `docs/**`, `scripts/generate_api_docs.py`, or `with_sam/src/satellit_sam/**`.
 - If you add repeatable checks, document runnable commands here.
