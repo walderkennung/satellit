@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from satellit_sam.image_processing import HeightMap, LiDARData
+from satellit_sam.core import HeightMap, LiDARData
 
 
 class TestLiDARData:

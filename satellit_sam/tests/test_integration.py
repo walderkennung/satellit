@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from skimage.metrics import structural_similarity as ssim
 
-from satellit_sam.image_processing import Image, TilesDir, tile_image
+from satellit_sam.core import Image, TilesDir, tile_image
 
 
 @pytest.mark.integration
@@ -25,9 +25,8 @@ class TestEndToEndTileReconstruct:
             medium_test_image,
             tile_size=256,
             overlap=0,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
         tiles_dir.save_to_dir()
 
         # Step 2: Reconstruct the image
@@ -48,9 +47,8 @@ class TestEndToEndTileReconstruct:
             medium_test_image,
             tile_size=256,
             overlap=64,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
         tiles_dir.save_to_dir()
 
         # Reconstruct
@@ -72,9 +70,8 @@ class TestEndToEndTileReconstruct:
             medium_test_image,
             tile_size=256,
             overlap=0,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
         reconstructed = tiles_dir.reconstruct_image()
 
         # Compare RGB channels (ignore alpha from reconstruction)
@@ -103,9 +100,8 @@ class TestEndToEndTileReconstruct:
             medium_test_image,
             tile_size=256,
             overlap=64,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
         reconstructed = tiles_dir.reconstruct_image()
 
         # Compare RGB channels
@@ -134,9 +130,8 @@ class TestEndToEndTileReconstruct:
             forest_image,
             tile_size=512,
             overlap=128,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
         tiles_dir.save_to_dir()
 
         # Verify tiles were created
@@ -160,9 +155,8 @@ class TestEndToEndTileReconstruct:
             medium_test_image,
             tile_size=256,
             overlap=64,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
         tiles_dir.save_to_dir()
 
         # Step 2: Load from directory (simulating a fresh session)
@@ -187,9 +181,8 @@ class TestEndToEndTileReconstruct:
                 medium_test_image,
                 tile_size=tile_size,
                 overlap=tile_size // 4,
-                output_path=str(tiles_rgb_path),
+                output_path=str(output_path),
             )
-            tiles_dir.output_path = str(output_path)
 
             reconstructed = tiles_dir.reconstruct_image()
             assert reconstructed.size == medium_test_image.size
@@ -209,9 +202,8 @@ class TestTileIteration:
             small_test_image,
             tile_size=50,
             overlap=10,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         # Count tiles through iteration
         tile_count = 0
@@ -232,9 +224,8 @@ class TestTileIteration:
             medium_test_image,
             tile_size=256,
             overlap=64,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         for tile in tiles_dir:
             # Each tile should have valid dimensions
@@ -257,9 +248,8 @@ class TestTilePositions:
             small_test_image,
             tile_size=50,
             overlap=10,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         positions = tiles_dir.get_tile_positions()
 
@@ -283,9 +273,8 @@ class TestTilePositions:
             medium_test_image,
             tile_size=256,
             overlap=64,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         positions = tiles_dir.get_tile_positions()
         tile_files = list(Path(tiles_rgb_path).glob("tile_*.png"))
@@ -308,9 +297,8 @@ class TestEdgeCasesIntegration:
             medium_test_image,
             tile_size=256,
             overlap=1,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         reconstructed = tiles_dir.reconstruct_image()
         assert reconstructed.size == medium_test_image.size
@@ -325,9 +313,8 @@ class TestEdgeCasesIntegration:
             medium_test_image,
             tile_size=256,
             overlap=128,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         reconstructed = tiles_dir.reconstruct_image()
         assert reconstructed.size == medium_test_image.size
@@ -346,9 +333,8 @@ class TestEdgeCasesIntegration:
             rect_image,
             tile_size=200,
             overlap=50,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         reconstructed = tiles_dir.reconstruct_image()
         assert reconstructed.size == rect_image.size
@@ -377,9 +363,8 @@ class TestPixelAccuracy:
             test_image,
             tile_size=128,
             overlap=0,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         reconstructed = tiles_dir.reconstruct_image()
 
@@ -399,9 +384,8 @@ class TestPixelAccuracy:
             medium_test_image,
             tile_size=256,
             overlap=32,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         reconstructed = tiles_dir.reconstruct_image()
 

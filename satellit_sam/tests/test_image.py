@@ -5,7 +5,7 @@ import os
 import numpy as np
 import pytest
 
-from satellit_sam.image_processing import Image
+from satellit_sam.core import Image
 
 
 @pytest.mark.unit

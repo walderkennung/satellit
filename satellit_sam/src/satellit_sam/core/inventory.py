@@ -8,8 +8,8 @@ from typing import Literal
 from osgeo import gdal, ogr, osr
 from pyproj import Geod
 
-from src.satellit_sam.core.allometry import DbhUnit, to_dbh_cm
-from src.satellit_sam.core.tree import Tree
+from satellit_sam.core.allometry import DbhUnit, to_dbh_cm
+from satellit_sam.core.tree import Tree
 
 gdal.UseExceptions()
 

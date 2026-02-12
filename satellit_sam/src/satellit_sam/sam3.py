@@ -1,12 +1,9 @@
-from dataclasses import dataclass
-
 import torch
 import torchvision
 from transformers import Sam3Model, Sam3Processor
 
+from satellit_sam.core import Image
 from satellit_sam.plot import annotate, from_sam
-
-from .image_processing import Image
 
 
 class SamSingleton:
@@ -48,9 +45,7 @@ class SamSingleton:
 
         if boxes:
             processor_kwargs["input_boxes"] = [[list(box) for box in boxes]]
-            processor_kwargs["input_boxes_labels"] = [
-                box_labels or [1] * len(boxes)
-            ]
+            processor_kwargs["input_boxes_labels"] = [box_labels or [1] * len(boxes)]
 
         inputs = self.processor(**processor_kwargs).to(self.device)
 

@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import pytest
 
-from satellit_sam.image_processing import Image, TilesDir, tile_image
+from satellit_sam.core import Image, TilesDir, tile_image
 
 
 @pytest.mark.integration
@@ -24,9 +24,8 @@ class TestMissingCoverage:
             medium_test_image,
             tile_size=256,
             overlap=0,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         # Create a fake tile as a directory (not a file)
         # This will cause cv2.imread to fail and Image.load to raise FileNotFoundError
@@ -59,9 +58,8 @@ class TestMissingCoverage:
             rgb_image,
             tile_size=128,
             overlap=0,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         # Manually save one tile as RGBA to test the else branch (line 196)
         tile_files = list(Path(tiles_rgb_path).glob("tile_*.png"))
@@ -97,9 +95,8 @@ class TestMissingCoverage:
             medium_test_image,
             tile_size=256,
             overlap=0,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         # Manually resize one tile to trigger the resize path
         tile_files = list(Path(tiles_rgb_path).glob("tile_*.png"))
@@ -146,9 +143,8 @@ class TestMissingCoverage:
             small_test_image,
             tile_size=50,
             overlap=0,
-            output_path=str(tiles_rgb_path),
+            output_path=str(output_path),
         )
-        tiles_dir.output_path = str(output_path)
 
         # Use the iterator in a way that explicitly calls __next__ until StopIteration
         iterator = iter(tiles_dir)

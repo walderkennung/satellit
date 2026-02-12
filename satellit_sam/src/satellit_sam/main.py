@@ -3,12 +3,13 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from .prompts import parse_tile_origin, project_bboxes_to_tile
-from .workflows.process import (
+from satellit_sam.core import (
     Image,
     create_heightmap_from_las,
     tile_image,
 )
+
+from .prompts import parse_tile_origin, project_bboxes_to_tile, tile_id_from_origin
 
 
 def predict_masks(
@@ -18,6 +19,8 @@ def predict_masks(
     output_path: Path,
     text_prompt: str | None,
     bbox_prompts: list[tuple[float, float, float, float]],
+    weak_label_bboxes_by_tile: dict[str, list[tuple[float, float, float, float]]]
+    | None = None,
 ) -> None:
     asyncio.run(
         predict_masks_async(
@@ -27,6 +30,7 @@ def predict_masks(
             output_path=output_path,
             text_prompt=text_prompt,
             bbox_prompts=bbox_prompts,
+            weak_label_bboxes_by_tile=weak_label_bboxes_by_tile,
         )
     )
 
@@ -38,6 +42,8 @@ async def predict_masks_async(
     output_path: Path,
     text_prompt: str | None,
     bbox_prompts: list[tuple[float, float, float, float]],
+    weak_label_bboxes_by_tile: dict[str, list[tuple[float, float, float, float]]]
+    | None = None,
 ) -> None:
     from .sam3 import sam
 
@@ -68,19 +74,28 @@ async def predict_masks_async(
     )
     tiling_dir.save_to_dir()
 
-    if text_prompt and bbox_prompts:
+    weak_bbox_count = (
+        sum(len(boxes) for boxes in weak_label_bboxes_by_tile.values())
+        if weak_label_bboxes_by_tile
+        else 0
+    )
+    total_bbox_prompts = len(bbox_prompts) + weak_bbox_count
+
+    if text_prompt and total_bbox_prompts > 0:
         print(
             "Generating masks with text prompt "
-            f"'{text_prompt}' and {len(bbox_prompts)} bbox prompt(s)..."
+            f"'{text_prompt}' and {total_bbox_prompts} bbox prompt(s)..."
         )
     elif text_prompt:
         print(f"Generating masks with text prompt: '{text_prompt}'...")
     else:
-        print(f"Generating masks with {len(bbox_prompts)} bbox prompt(s)...")
+        print(f"Generating masks with {total_bbox_prompts} bbox prompt(s)...")
 
     with tqdm(total=len(tiling_dir), desc="Processing tiles", unit="tile") as pbar:
         for tile in tiling_dir:
-            tile_bboxes = None
+            tile_origin: tuple[int, int] | None = None
+            tile_bboxes: list[tuple[float, float, float, float]] = []
+
             if bbox_prompts:
                 tile_origin = parse_tile_origin(tile.path)
                 projected_bboxes = project_bboxes_to_tile(
@@ -88,14 +103,24 @@ async def predict_masks_async(
                     tile_origin=tile_origin,
                     tile_size=tile.image.size,
                 )
-                if projected_bboxes:
-                    tile_bboxes = projected_bboxes
-                elif text_prompt is None:
+                tile_bboxes.extend(projected_bboxes)
+
+            if weak_label_bboxes_by_tile:
+                if tile_origin is None:
+                    tile_origin = parse_tile_origin(tile.path)
+                tile_id = tile_id_from_origin(tile_origin)
+                tile_bboxes.extend(weak_label_bboxes_by_tile.get(tile_id, []))
+
+            if not tile_bboxes:
+                if text_prompt is None:
                     tiling_dir.save_annotated_tile(tile, tile.image.copy())
                     pbar.update(1)
                     continue
+                boxes_arg = None
+            else:
+                boxes_arg = tile_bboxes
 
-            ann_image = sam.predict(tile.image, text=text_prompt, boxes=tile_bboxes)
+            ann_image = sam.predict(tile.image, text=text_prompt, boxes=boxes_arg)
             tiling_dir.save_annotated_tile(tile, ann_image)
             pbar.update(1)
 

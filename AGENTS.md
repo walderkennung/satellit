@@ -65,6 +65,8 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 - `pixi run sam-test` (validate SAM setup)
 - `pixi run test` (run test suite with coverage)
 - For CUDA on Linux: `pixi install -e cuda` and `pixi run -e cuda predict-masks`.
+- `satellit -- label weak` writes per-tree weak-label crown bounding boxes (`bbox_x1,bbox_y1,bbox_x2,bbox_y2`) into `labels_tiles.csv` and `labels_tiles.shp`.
+- `satellit -- label by-bounding-boxes --weak-labels-csv <labels_tiles.csv>` consumes those stored tile-local bboxes as SAM box prompts.
 - Documentation site tasks (run from `docs/`):
 - `bun run gen:api` (generate API docs via Pixi task)
 - `bun run dev` (generate API docs, then run docmd dev server)

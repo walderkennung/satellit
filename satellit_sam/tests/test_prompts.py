@@ -3,6 +3,7 @@
 import pytest
 
 from satellit_sam.prompts import (
+    load_weak_label_bboxes,
     parse_bbox_prompt,
     parse_bbox_prompts,
     parse_tile_origin,
@@ -68,3 +69,49 @@ class TestTileProjection:
         )
 
         assert tile_bboxes == []
+
+
+@pytest.mark.unit
+class TestWeakLabelBboxes:
+    """Tests for loading weak-label bbox prompts from CSV."""
+
+    def test_load_weak_label_bboxes(self, tmp_path):
+        csv_path = tmp_path / "labels_tiles.csv"
+        csv_path.write_text(
+            (
+                "tile_id,tree_id,x_pixel,y_pixel,crown_radius,bbox_x1,bbox_y1,bbox_x2,bbox_y2\n"
+                "tile_x0_y0,t1,10,20,5,4.0,14.0,16.0,26.0\n"
+                "tile_x0_y0,t2,30,40,6,22.0,32.0,38.0,48.0\n"
+                "tile_x64_y0,t3,8,9,3,2.5,3.5,12.5,13.5\n"
+            ),
+            encoding="utf-8",
+        )
+
+        assert load_weak_label_bboxes(csv_path) == {
+            "tile_x0_y0": [(4.0, 14.0, 16.0, 26.0), (22.0, 32.0, 38.0, 48.0)],
+            "tile_x64_y0": [(2.5, 3.5, 12.5, 13.5)],
+        }
+
+    def test_load_weak_label_bboxes_rejects_missing_columns(self, tmp_path):
+        csv_path = tmp_path / "labels_tiles.csv"
+        csv_path.write_text(
+            "tile_id,tree_id,x_pixel,y_pixel,crown_radius\n"
+            "tile_x0_y0,t1,10,20,5\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="missing required bbox columns"):
+            load_weak_label_bboxes(csv_path)
+
+    def test_load_weak_label_bboxes_rejects_invalid_order(self, tmp_path):
+        csv_path = tmp_path / "labels_tiles.csv"
+        csv_path.write_text(
+            (
+                "tile_id,tree_id,x_pixel,y_pixel,crown_radius,bbox_x1,bbox_y1,bbox_x2,bbox_y2\n"
+                "tile_x0_y0,t1,10,20,5,4.0,14.0,4.0,26.0\n"
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="invalid bbox order"):
+            load_weak_label_bboxes(csv_path)

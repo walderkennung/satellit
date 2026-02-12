@@ -8,7 +8,7 @@ to load LiDAR data, create height maps with different settings, and save them.
 
 from pathlib import Path
 
-from satellit_sam.image_processing import (
+from satellit_sam.core import (
     HeightMap,
     LiDARData,
     create_heightmap_from_las,
