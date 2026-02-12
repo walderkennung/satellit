@@ -59,8 +59,8 @@ def make_weak_labels(
 ) -> None:
     """Generate tile-wise weak labels and write them to ``labels_tiles.yaml``.
 
-    The function accepts either explicit keyword arguments or an argparse
-    namespace (used by the CLI workflow).
+    The function is intended to be configured via its explicit keyword
+    arguments, e.g. when called from a CLI wrapper or other Python code.
     """
     if image_tif is None:
         raise ValueError("`image_tif` must be provided.")
