@@ -22,8 +22,8 @@ pixi run satellit -- --help
 
 Main command groups:
 
-- `image-processing`
 - `label weak`
+- `label by-bounding-boxes`
 
 Detailed CLI docs:
 
@@ -48,3 +48,4 @@ bun run build
 
 - Use Pixi commands for SAM/project code in this repository.
 - The SAM-specific project lives under `satellit_sam/`.
+- Run documentation commands from `docs/` with Bun (`bun run dev`, `bun run build`).

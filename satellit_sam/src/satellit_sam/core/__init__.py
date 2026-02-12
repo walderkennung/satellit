@@ -1,3 +1,5 @@
+"""Core data structures and utilities used by satellit workflows."""
+
 from .allometry import CrownModel, DbhUnit, compute_crown_radius_m, to_dbh_cm
 from .geotiff import GeoTiffMeta
 from .heightmap import HeightMap, LiDARData, create_heightmap_from_las

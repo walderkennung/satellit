@@ -1,3 +1,5 @@
+"""Label command group and command handlers for the satellit CLI."""
+
 from pathlib import Path
 from typing import Annotated
 
@@ -168,6 +170,40 @@ def weak(
         ),
     ] = False,
 ) -> None:
+    """Generate weak labels from tree inventory data.
+
+    Args:
+        image_tif: Orthophoto GeoTIFF path.
+        inventory_csv: Optional inventory CSV path.
+        inventory_shp: Optional inventory shapefile path.
+        output_dir: Output directory for generated artifacts.
+        tile_size: Tile size in pixels.
+        overlap: Tile overlap in pixels.
+        x_field: Inventory x-coordinate field.
+        y_field: Inventory y-coordinate field.
+        tree_id_field: Inventory tree id field.
+        species_field: Inventory species field.
+        status_field: Inventory status field.
+        status_filter: Optional status filter.
+        dbh_field: Inventory DBH field.
+        dbh_unit: DBH input unit.
+        default_crown_radius_m: Fallback radius for missing DBH.
+        min_dbh_cm: Minimum DBH filter.
+        max_dbh_cm: Maximum DBH filter.
+        deduplicate_tree_id: Keep one row per tree id.
+        crown_model: Crown radius model.
+        linear_factor_m_per_cm: Linear model slope.
+        linear_intercept_m: Linear model intercept.
+        power_a: Power model factor.
+        power_b: Power model exponent.
+        min_crown_radius_m: Lower crown-radius clamp.
+        max_crown_radius_m: Upper crown-radius clamp.
+        bbox_padding_px: Extra bbox padding in pixels.
+        export_visualizations: Whether visualization files are exported.
+
+    Raises:
+        typer.BadParameter: If inventory sources are misconfigured.
+    """
     if inventory_csv is not None and inventory_shp is not None:
         raise typer.BadParameter(
             "Provide only one of --inventory-csv or --inventory-shp.",
@@ -269,7 +305,19 @@ def by_bounding_boxes(
         ),
     ] = None,
 ) -> None:
-    """Generate label overlays from bounding-box prompts."""
+    """Generate label overlays from explicit or weak-label box prompts.
+
+    Args:
+        image_path: Input image path.
+        tile_size: Tile size in pixels.
+        overlap: Tile overlap in pixels.
+        output_path: Output directory for generated tiles.
+        bbox_prompts: Optional image-space box prompts.
+        weak_labels_csv: Optional weak-label CSV with tile-local prompts.
+
+    Raises:
+        typer.BadParameter: If prompt arguments are invalid.
+    """
     try:
         parsed_bbox_prompts = parse_bbox_prompts(bbox_prompts)
     except ValueError as err:
