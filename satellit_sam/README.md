@@ -8,7 +8,7 @@ Satellite imagery segmentation and weak-label generation using the Segment Anyth
 
 ## Setup
 
-Install dependencies from `with_sam/`:
+Install dependencies from `satellit_sam/`:
 
 ```bash
 pixi install
@@ -114,7 +114,7 @@ Complete CLI docs (all commands/options/arguments) are in:
 
 ## Testing
 
-Run tests from `with_sam/`:
+Run tests from `satellit_sam/`:
 
 ```bash
 pixi run test

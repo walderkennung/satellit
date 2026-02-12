@@ -7,7 +7,7 @@ on:
     paths:
       - docs/**
       - scripts/generate_api_docs.py
-      - with_sam/src/satellit_sam/**
+      - satellit_sam/src/satellit_sam/**
       - .github/workflows/docs-pages.yml
   workflow_dispatch:
 

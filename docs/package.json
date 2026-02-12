@@ -1,7 +1,7 @@
 {
   "scripts": {
     "gen:api": "bun run gen:api:satellit_sam",
-    "gen:api:satellit_sam": "../scripts/generate_api_docs.py --package-name satellit_sam --output-dir ./content/api/ --source-dir ../with_sam/src/satellit_sam --content-dir ./content",
+    "gen:api:satellit_sam": "../scripts/generate_api_docs.py --package-name satellit_sam --output-dir ./content/api/ --source-dir ../satellit_sam/src/satellit_sam --content-dir ./content",
     "dev": "bun run gen:api && docmd dev",
     "build": "bun run gen:api && docmd build"
   },

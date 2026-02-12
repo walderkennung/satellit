@@ -8,16 +8,19 @@ The heightmap functionality has been successfully integrated into the `satellit_
 
 ### 1. Core Module: `heightmap.py`
 
-Location: `satellit/with_sam/src/satellit_sam/image_processing/heightmap.py`
+Location: `satellit/satellit_sam/src/satellit_sam/image_processing/heightmap.py`
 
 **Classes:**
+
 - `LiDARData`: Container for LiDAR point cloud data with methods to load from .las files
 - `HeightMap`: 2D height map representation with conversion and saving capabilities
 
 **Functions:**
+
 - `create_heightmap_from_las()`: Convenience function for one-step height map creation
 
 **Key Features:**
+
 - Three aggregation methods: max, mean, median
 - Configurable grid resolution (meters per pixel)
 - Custom normalization ranges for grayscale conversion
@@ -26,9 +29,10 @@ Location: `satellit/with_sam/src/satellit_sam/image_processing/heightmap.py`
 
 ### 2. Updated Module Exports
 
-Location: `satellit/with_sam/src/satellit_sam/image_processing/__init__.py`
+Location: `satellit/satellit_sam/src/satellit_sam/image_processing/__init__.py`
 
 Added exports:
+
 - `HeightMap`
 - `LiDARData`
 - `create_heightmap_from_las`
@@ -38,6 +42,7 @@ Added exports:
 Location: `satellit/scripts/generate_heightmap.py`
 
 Provides CLI access with options:
+
 - `-r, --resolution`: Grid resolution in meters (default: 0.5)
 - `-m, --method`: Aggregation method: max, mean, median (default: max)
 - `-o, --output`: Output file path
@@ -45,9 +50,10 @@ Provides CLI access with options:
 
 ### 4. Comprehensive Tests
 
-Location: `satellit/with_sam/tests/test_heightmap.py`
+Location: `satellit/satellit_sam/tests/test_heightmap.py`
 
 13 unit tests covering:
+
 - LiDAR data loading and properties
 - Height map creation with all methods
 - Grayscale normalization (default and custom ranges)
@@ -60,10 +66,12 @@ Location: `satellit/with_sam/tests/test_heightmap.py`
 ### 5. Documentation
 
 **Main Documentation:**
-- `satellit/with_sam/docs/heightmap.md`: Complete API reference and usage guide
+
+- `satellit/satellit_sam/docs/heightmap.md`: Complete API reference and usage guide
 
 **Example Code:**
-- `satellit/with_sam/examples/heightmap_example.py`: Five comprehensive examples demonstrating different use cases
+
+- `satellit/satellit_sam/examples/heightmap_example.py`: Five comprehensive examples demonstrating different use cases
 
 ## Usage Examples
 
@@ -115,26 +123,31 @@ The heightmap functionality integrates seamlessly with the existing `image_proce
 ## Verified Functionality
 
 Successfully tested with real data:
+
 - **Input:** `data/Traunstein/2018/inventory_plot_normalized.las`
 - **Points:** 10,204,576
 - **Coverage:** ~1.17 km × 0.41 km
 - **Height range:** 0.00 - 41.48 meters
 
 Generated outputs:
+
 - `output/heightmap_test.png` (821 KB, 2338×821 pixels at 0.5m resolution)
 - `output/heightmap_mean_1m.png` (226 KB, 1169×411 pixels at 1.0m resolution)
 
 ## Dependencies
 
 **New dependency added:**
+
 - `laspy>=2.7.0`: For reading .las LiDAR files
 
 **Installation:**
+
 ```bash
 pixi run pip install laspy
 ```
 
 **Existing dependencies used:**
+
 - `numpy`: Array operations and grid calculations
 - `PIL (Pillow)`: Image saving
 - Module already has these dependencies
@@ -142,6 +155,7 @@ pixi run pip install laspy
 ## Performance
 
 Processing ~10 million points:
+
 - 0.5m resolution: ~10-20 seconds, 821 KB PNG
 - 1.0m resolution: ~5-10 seconds, 226 KB PNG
 - Memory efficient: Uses numpy arrays with appropriate data types
@@ -149,15 +163,17 @@ Processing ~10 million points:
 ## Files Modified/Created
 
 **Created:**
-- `satellit/with_sam/src/satellit_sam/image_processing/heightmap.py` (286 lines)
-- `satellit/with_sam/tests/test_heightmap.py` (168 lines)
-- `satellit/with_sam/examples/heightmap_example.py` (159 lines)
-- `satellit/with_sam/docs/heightmap.md` (333 lines)
+
+- `satellit/satellit_sam/src/satellit_sam/image_processing/heightmap.py` (286 lines)
+- `satellit/satellit_sam/tests/test_heightmap.py` (168 lines)
+- `satellit/satellit_sam/examples/heightmap_example.py` (159 lines)
+- `satellit/satellit_sam/docs/heightmap.md` (333 lines)
 - `satellit/scripts/generate_heightmap.py` (147 lines)
-- `satellit/with_sam/docs/heightmap_integration.md` (this file)
+- `satellit/satellit_sam/docs/heightmap_integration.md` (this file)
 
 **Modified:**
-- `satellit/with_sam/src/satellit_sam/image_processing/__init__.py`: Added exports
+
+- `satellit/satellit_sam/src/satellit_sam/image_processing/__init__.py`: Added exports
 
 **Total:** ~1,093 lines of new code, documentation, and tests
 
@@ -174,6 +190,7 @@ Processing ~10 million points:
 ## Next Steps
 
 Potential enhancements:
+
 1. Add support for other point cloud formats (LAZ, PLY)
 2. Implement spatial filtering (e.g., vegetation vs. ground)
 3. Add colormap options for visualization
