@@ -66,6 +66,12 @@ def make_weak_labels(
         raise ValueError("`image_tif` must be provided.")
     if inventory_csv is not None and inventory_shp is not None:
         raise ValueError("Provide only one of `inventory_csv` or `inventory_shp`.")
+
+    if inventory_csv is None and inventory_shp is None:
+        raise ValueError(
+            "No inventory source provided. -- Provide either `inventory_csv` or `inventory_shp`."
+        )
+
     if tile_size <= 0:
         raise ValueError("`tile_size` must be > 0.")
     if tile_overlap < 0 or tile_overlap >= tile_size:
@@ -107,8 +113,8 @@ def make_weak_labels(
             deduplicate_tree_id=deduplicate_tree_id,
         )
     else:
-        raise ValueError(
-            "No inventory source provided. -- Provide either `inventory_csv` or `inventory_shp`."
+        assert False, (
+            "Unreachable code: inventory source check should have raised an error."
         )
 
     wgs84_to_image = _build_wgs84_to_image_crs_transform(meta=meta)
