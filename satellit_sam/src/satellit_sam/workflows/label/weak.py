@@ -235,8 +235,6 @@ def make_weak_labels(
     visualization_outputs: dict[str, str] = {}
     if export_visualizations:
         visualization_tiles = [tile for tile in tiles if (tile["trees"])]
-        if not only_non_empty_tiles:
-            visualization_tiles = tiles
         visualization_outputs = export_visualizations_opencv(
             image_tif=image_tif,
             output_dir=output_dir,
