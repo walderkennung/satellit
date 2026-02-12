@@ -1,49 +1,22 @@
 ---
-title: "Welcome"
-description: "Welcome to your new documentation site."
+title: "Walderkennung Satellit Docs"
+description: "Documentation for the Satellit SAM workflows, CLI, and knowledge base."
 ---
 
-# Welcome to Your Docs
+# Walderkennung Satellit Documentation
 
-Congratulations! You have successfully initialized a new **docmd** project.
+This site documents the SAM processing workflows and the `satellit_sam` CLI.
 
-## 🚀 Quick Start
+## Start Here
 
-You are currently viewing the content of `docs/index.md`.
+- [CLI Application Reference](./cli/application.md)
+- [Knowledge Base Overview](./knowledgebase/fine_tuning_transfer_learning.md)
+
+## Docs Commands
+
+From `docs/`:
 
 ```bash
-npm start   # Start the dev server
-docmd build # Build for production
+bun run dev
+bun run build
 ```
-
-## ✨ Features Demo
-
-docmd comes with built-in components to make your documentation beautiful.
-
-::: callout tip
-**Try this:** Edit this file and save it. The browser will live reload instantly!
-:::
-
-### Container Examples
-
-::: card Flexible Structure
-**Organize your way.**
-Create Markdown files in the `docs/` folder and map them in `docmd.config.js`.
-:::
-
-::: tabs
-== tab "Simple"
-This is a simple tab content.
-
-== tab "Nested"
-::: callout info
-You can even nest other components inside tabs!
-:::
-
-:::
-
-## 📚 Next Steps
-
-*   [Check the Official Documentation](https://docs.docmd.io)
-*   [Customize your Theme](https://docs.docmd.io/theming)
-*   [Deploy to GitHub Pages](https://docs.docmd.io/deployment)

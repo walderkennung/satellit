@@ -82,6 +82,14 @@ module.exports = {
   navigation: [
     { title: 'Introduction', path: '/', icon: 'home' },
     {
+      title: 'CLI',
+      icon: 'terminal',
+      collapsible: true,
+      children: [
+        { title: 'CLI Application', path: 'cli/application', icon: 'terminal-square' },
+      ],
+    },
+    {
       title: 'Knowledge Base',
       icon: 'book-open',
       collapsible: true,

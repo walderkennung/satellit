@@ -60,10 +60,9 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 
 - `with_sam` has its own Pixi configuration and should be treated as the home for SAM-specific code and workflows.
 - `with_sam` Pixi tasks (run from `with_sam/`):
+- `pixi run satellit` (run main satellit CLI)
 - `pixi run sam-download` (download SAM checkpoints)
 - `pixi run sam-test` (validate SAM setup)
-- `pixi run predict-masks` (run mask prediction)
-- `pixi run generate-weak-labels -- ...` (generate inventory weak labels)
 - `pixi run test` (run test suite with coverage)
 - For CUDA on Linux: `pixi install -e cuda` and `pixi run -e cuda predict-masks`.
 - Documentation site tasks (run from `docs/`):
