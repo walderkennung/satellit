@@ -3,12 +3,13 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from .prompts import parse_tile_origin, project_bboxes_to_tile, tile_id_from_origin
-from .workflows.process import (
+from satellit_sam.core import (
     Image,
     create_heightmap_from_las,
     tile_image,
 )
+
+from .prompts import parse_tile_origin, project_bboxes_to_tile, tile_id_from_origin
 
 
 def predict_masks(
@@ -18,7 +19,8 @@ def predict_masks(
     output_path: Path,
     text_prompt: str | None,
     bbox_prompts: list[tuple[float, float, float, float]],
-    weak_label_bboxes_by_tile: dict[str, list[tuple[float, float, float, float]]] | None = None,
+    weak_label_bboxes_by_tile: dict[str, list[tuple[float, float, float, float]]]
+    | None = None,
 ) -> None:
     asyncio.run(
         predict_masks_async(
@@ -40,7 +42,8 @@ async def predict_masks_async(
     output_path: Path,
     text_prompt: str | None,
     bbox_prompts: list[tuple[float, float, float, float]],
-    weak_label_bboxes_by_tile: dict[str, list[tuple[float, float, float, float]]] | None = None,
+    weak_label_bboxes_by_tile: dict[str, list[tuple[float, float, float, float]]]
+    | None = None,
 ) -> None:
     from .sam3 import sam
 

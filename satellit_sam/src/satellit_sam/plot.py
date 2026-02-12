@@ -4,7 +4,7 @@ import numpy as np
 import supervision as sv
 import torch
 
-from .image_processing import Image
+from satellit_sam.core import Image
 
 COLOR = sv.ColorPalette.from_hex(
     [

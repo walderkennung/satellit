@@ -3,8 +3,12 @@ from typing import Annotated
 
 import typer
 
-from src.satellit_sam.core.allometry import CrownModel, DbhUnit
-from src.satellit_sam.workflows.label.weak import make_weak_labels
+from satellit_sam.core.allometry import CrownModel, DbhUnit
+from satellit_sam.prompts import load_weak_label_bboxes, parse_bbox_prompts
+from satellit_sam.workflows.label.by_bounding_box import (
+    make_labels_by_bounding_box,
+)
+from satellit_sam.workflows.label.weak import make_weak_labels
 
 app = typer.Typer(no_args_is_help=True)
 

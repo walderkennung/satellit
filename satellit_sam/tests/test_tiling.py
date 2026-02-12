@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from satellit_sam.image_processing import TilesDir, tile_image
+from satellit_sam.core import TilesDir, tile_image
 
 
 @pytest.mark.unit
@@ -48,7 +48,7 @@ class TestBasicTiling:
         )
 
         # Check that tile files were created
-        tile_files = list(output_path.glob("tile_*.png"))
+        tile_files = list((output_path / "tiles_rgb").glob("tile_*.png"))
         assert len(tile_files) > 0
 
     def test_tile_image_with_tuple_sizes(self, medium_test_image, temp_dir):
@@ -88,7 +88,7 @@ class TestBasicTiling:
             medium_test_image, tile_size=256, overlap=0, output_path=str(output_path)
         )
 
-        tile_files = list(output_path.glob("tile_*.png"))
+        tile_files = list((output_path / "tiles_rgb").glob("tile_*.png"))
         # Note: Based on the code, tiles start from tile_size, so we need to verify actual behavior
         assert len(tile_files) >= 1
 
@@ -101,7 +101,7 @@ class TestBasicTiling:
             small_test_image, tile_size=50, overlap=0, output_path=str(output_path)
         )
 
-        tile_files = list(output_path.glob("tile_*.png"))
+        tile_files = list((output_path / "tiles_rgb").glob("tile_*.png"))
         assert len(tile_files) > 0
 
         # Check filename format: tile_x{X}_y{Y}.png
@@ -199,6 +199,5 @@ class TestTilesDirIntegration:
             medium_test_image, tile_size=256, overlap=64, output_path=str(output_path)
         )
 
-        # Tiles should be directly in output_path based on the code
-        tile_files = list(Path(output_path).glob("tile_*.png"))
+        tile_files = list((Path(output_path) / "tiles_rgb").glob("tile_*.png"))
         assert len(tile_files) > 0

@@ -6,7 +6,7 @@ from typing import AsyncIterable, Literal
 
 from PIL import Image
 
-from src.satellit_sam.sam3 import sam
+from satellit_sam.sam3 import sam
 
 
 @dataclass
