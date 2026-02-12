@@ -9,6 +9,7 @@ satellit = "python -m satellit_sam.main"
 sam-download = "python scripts/download_sam.py"
 sam-test = "python scripts/test_sam.py"
 test = "pytest tests/ -v --cov=satellit_sam --cov-report=term-missing"
+docstring-coverage = "python scripts/docstring_coverage.py"
 
 [dependencies]
 ipykernel = ">=7.2.0,<8"
