@@ -13,7 +13,6 @@ tiles:
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +28,7 @@ from src.satellit_sam.core.inventory import Inventory
 
 
 def make_weak_labels(
-    output_dir: Path | argparse.Namespace,
+    output_dir: Path,
     image_tif: Path | None = None,
     tile_size: int = 1024,
     tile_overlap: int = 128,
@@ -62,61 +61,10 @@ def make_weak_labels(
     The function accepts either explicit keyword arguments or an argparse
     namespace (used by the CLI workflow).
     """
-    if isinstance(output_dir, argparse.Namespace):
-        args = output_dir
-        run(
-            output_dir=Path(args.output_dir),
-            image_tif=Path(args.image_tif),
-            tile_size=int(getattr(args, "tile_size", tile_size)),
-            tile_overlap=int(getattr(args, "overlap", tile_overlap)),
-            min_dbh_cm=float(getattr(args, "min_dbh_cm", min_dbh_cm)),
-            max_dbh_cm=float(getattr(args, "max_dbh_cm", max_dbh_cm)),
-            crown_model=getattr(args, "crown_model", crown_model),
-            export_visualizations=bool(
-                getattr(args, "export_visualizations", export_visualizations)
-            ),
-            inventory_csv=getattr(args, "inventory_csv", inventory_csv),
-            inventory_shp=getattr(args, "inventory_shp", inventory_shp),
-            x_field=str(getattr(args, "x_field", x_field)),
-            y_field=str(getattr(args, "y_field", y_field)),
-            tree_id_field=str(getattr(args, "tree_id_field", tree_id_field)),
-            species_field=str(getattr(args, "species_field", species_field)),
-            status_field=str(getattr(args, "status_field", status_field)),
-            status_filter=str(getattr(args, "status_filter", status_filter)),
-            dbh_field=str(getattr(args, "dbh_field", dbh_field)),
-            dbh_unit=getattr(args, "dbh_unit", dbh_unit),
-            deduplicate_tree_id=bool(
-                getattr(args, "deduplicate_tree_id", deduplicate_tree_id)
-            ),
-            default_crown_radius_m=float(
-                getattr(args, "default_crown_radius_m", default_crown_radius_m)
-            ),
-            linear_factor_m_per_cm=float(
-                getattr(args, "linear_factor_m_per_cm", linear_factor_m_per_cm)
-            ),
-            linear_intercept_m=float(
-                getattr(args, "linear_intercept_m", linear_intercept_m)
-            ),
-            power_a=float(getattr(args, "power_a", power_a)),
-            power_b=float(getattr(args, "power_b", power_b)),
-            min_crown_radius_m=float(
-                getattr(args, "min_crown_radius_m", min_crown_radius_m)
-            ),
-            max_crown_radius_m=float(
-                getattr(args, "max_crown_radius_m", max_crown_radius_m)
-            ),
-            only_non_empty_tiles=bool(
-                getattr(args, "only_non_empty_tiles", only_non_empty_tiles)
-            ),
-        )
-        return
-
     if image_tif is None:
         raise ValueError("`image_tif` must be provided.")
     if inventory_csv is not None and inventory_shp is not None:
         raise ValueError("Provide only one of `inventory_csv` or `inventory_shp`.")
-    if inventory_csv is None and inventory_shp is None:
-        raise ValueError("Provide either `inventory_csv` or `inventory_shp`.")
     if tile_size <= 0:
         raise ValueError("`tile_size` must be > 0.")
     if tile_overlap < 0 or tile_overlap >= tile_size:
@@ -139,7 +87,7 @@ def make_weak_labels(
             species_field=species_field,
             deduplicate_tree_id=deduplicate_tree_id,
         )
-    else:
+    elif inventory_csv is not None:
         csv_origin_lon, csv_origin_lat = _image_upper_left_wgs84(meta=meta)
         inventory.load_csv(
             csv_path=inventory_csv,
@@ -156,6 +104,10 @@ def make_weak_labels(
             tree_id_field=tree_id_field,
             species_field=species_field,
             deduplicate_tree_id=deduplicate_tree_id,
+        )
+    else:
+        raise ValueError(
+            "No inventory source provided. -- Provide either `inventory_csv` or `inventory_shp`."
         )
 
     wgs84_to_image = _build_wgs84_to_image_crs_transform(meta=meta)
