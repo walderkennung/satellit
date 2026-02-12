@@ -3,6 +3,8 @@ from pathlib import Path
 
 from osgeo import gdal
 
+gdal.UseExceptions()
+
 
 @dataclass
 class GeoTiffMeta:

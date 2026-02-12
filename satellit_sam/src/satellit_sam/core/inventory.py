@@ -11,6 +11,8 @@ from pyproj import Geod
 from src.satellit_sam.core.allometry import DbhUnit, to_dbh_cm
 from src.satellit_sam.core.tree import Tree
 
+gdal.UseExceptions()
+
 InventoryCoordinates = Literal["auto", "local", "utm"]
 _WGS84_GEOD = Geod(ellps="WGS84")
 
