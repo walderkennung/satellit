@@ -321,8 +321,6 @@ def _build_wgs84_to_image_crs_transform(
 
     wgs84 = _wgs84_srs()
     image_crs = _spatial_reference_from_wkt(meta.crs_wkt)
-    if wgs84.IsSame(image_crs):
-        return None
     return osr.CoordinateTransformation(wgs84, image_crs)
 
 
