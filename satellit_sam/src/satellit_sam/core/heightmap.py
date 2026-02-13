@@ -1,5 +1,4 @@
-"""
-Heightmap generation from LiDAR point cloud data.
+"""Heightmap generation from LiDAR point cloud data.
 
 This module provides functionality to read LiDAR .las files and generate
 grayscale height maps that can be used for visualization and further processing.
@@ -18,8 +17,7 @@ class LiDARData:
     """Container for LiDAR point cloud data."""
 
     def __init__(self, x: np.ndarray, y: np.ndarray, z: np.ndarray):
-        """
-        Initialize LiDAR data.
+        """Initialize LiDAR data.
 
         Args:
             x: X coordinates of points
@@ -52,8 +50,7 @@ class LiDARData:
 
     @staticmethod
     def from_las(las_path: str | Path) -> "LiDARData":
-        """
-        Read LiDAR data from .las file.
+        """Read LiDAR data from .las file.
 
         Args:
             las_path: Path to .las file
@@ -84,8 +81,7 @@ class HeightMap:
     def __init__(
         self, data: np.ndarray, resolution: float, origin: tuple[float, float]
     ):
-        """
-        Initialize height map.
+        """Initialize height map.
 
         Args:
             data: 2D array of height values
@@ -109,8 +105,7 @@ class HeightMap:
     def to_grayscale(
         self, z_min: float | None = None, z_max: float | None = None
     ) -> np.ndarray:
-        """
-        Convert height map to grayscale image (0-255).
+        """Convert height map to grayscale image (0-255).
 
         Args:
             z_min: Minimum height value for normalization. If None, uses data minimum.
@@ -135,8 +130,7 @@ class HeightMap:
     def to_rgb(
         self, z_min: float | None = None, z_max: float | None = None
     ) -> np.ndarray:
-        """
-        Convert height map to RGB image (grayscale).
+        """Convert height map to RGB image (grayscale).
 
         Args:
             z_min: Minimum height value for normalization. If None, uses data minimum.
@@ -149,8 +143,7 @@ class HeightMap:
         return np.stack((grayscale,) * 3, axis=-1)
 
     def to_image(self, z_min: float | None = None, z_max: float | None = None) -> Image:
-        """
-        Convert height map to Image object.
+        """Convert height map to Image object.
 
         Args:
             z_min: Minimum height value for normalization. If None, uses data minimum.
@@ -171,8 +164,7 @@ class HeightMap:
         z_min: float | None = None,
         z_max: float | None = None,
     ) -> None:
-        """
-        Save height map as grayscale image file.
+        """Save height map as grayscale image file.
 
         Args:
             path: Output file path
@@ -189,8 +181,7 @@ class HeightMap:
         width: int | None = None,
         height: int | None = None,
     ) -> "HeightMap":
-        """
-        Create height map from LiDAR point cloud data.
+        """Create height map from LiDAR point cloud data.
 
         Args:
             lidar: LiDARData object containing point cloud
@@ -316,8 +307,7 @@ def create_heightmap_from_las(
     width: int | None = None,
     height: int | None = None,
 ) -> HeightMap:
-    """
-    Create a height map from a LiDAR .las file.
+    """Create a height map from a LiDAR .las file.
 
     This is a convenience function that combines loading LiDAR data and
     creating a height map in one step.

@@ -1,3 +1,5 @@
+"""Allometric conversion helpers for DBH and crown-radius estimation."""
+
 from typing import Literal
 
 DbhUnit = Literal["mm", "cm", "m"]

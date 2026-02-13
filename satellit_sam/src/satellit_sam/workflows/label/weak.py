@@ -254,6 +254,17 @@ def make_weak_labels(
 
 
 def _build_tiles(width: int, height: int, tile_size: int, overlap: int) -> list[dict]:
+    """Build tile descriptors covering an image extent.
+
+    Args:
+        width: Image width in pixels.
+        height: Image height in pixels.
+        tile_size: Tile edge length in pixels.
+        overlap: Overlap between neighboring tiles in pixels.
+
+    Returns:
+        Tile dictionaries with bounds and tree accumulator lists.
+    """
     step = tile_size - overlap
     tiles: list[dict[str, Any]] = []
     for y0 in range(0, height, step):
@@ -282,6 +293,20 @@ def _circle_intersects_rect(
     x1: int,
     y1: int,
 ) -> bool:
+    """Return whether a circle intersects an axis-aligned rectangle.
+
+    Args:
+        center_x: Circle center x coordinate.
+        center_y: Circle center y coordinate.
+        radius: Circle radius in pixels.
+        x0: Rectangle minimum x.
+        y0: Rectangle minimum y.
+        x1: Rectangle maximum x.
+        y1: Rectangle maximum y.
+
+    Returns:
+        True if the circle touches or overlaps the rectangle.
+    """
     nearest_x = min(max(center_x, x0), x1)
     nearest_y = min(max(center_y, y0), y1)
     dx = center_x - nearest_x
@@ -297,6 +322,22 @@ def _crown_bbox_in_tile(
     tile_height: int,
     padding_px: float,
 ) -> tuple[float, float, float, float]:
+    """Build a tile-local bounding box around a crown center.
+
+    Args:
+        center_x: Crown center x coordinate in tile space.
+        center_y: Crown center y coordinate in tile space.
+        crown_radius_px: Crown radius in pixels.
+        tile_width: Tile width in pixels.
+        tile_height: Tile height in pixels.
+        padding_px: Additional bbox padding in pixels.
+
+    Returns:
+        Bounding box as ``(x1, y1, x2, y2)`` in tile coordinates.
+
+    Raises:
+        ValueError: If a valid bounding box cannot be produced.
+    """
     padded_radius = max(0.0, crown_radius_px + padding_px)
     x1 = max(0.0, center_x - padded_radius)
     y1 = max(0.0, center_y - padded_radius)
@@ -319,6 +360,17 @@ def _crown_bbox_in_tile(
 
 
 def _meter_to_pixel_scale(meta: GeoTiffMeta) -> float:
+    """Convert georeferenced pixel size to pixels-per-meter scale.
+
+    Args:
+        meta: GeoTIFF metadata containing pixel size values.
+
+    Returns:
+        Average pixels-per-meter conversion factor.
+
+    Raises:
+        ValueError: If GeoTIFF pixel size is invalid.
+    """
     px_size_x = abs(meta.pixel_size_x)
     px_size_y = abs(meta.pixel_size_y)
     mean_pixel_size = (px_size_x + px_size_y) / 2.0
@@ -334,6 +386,18 @@ def _wgs84_tree_to_pixel(
     wgs84_to_image: osr.CoordinateTransformation | None,
     utm_fallback: tuple[int, bool] | None,
 ) -> tuple[float, float]:
+    """Project WGS84 coordinates into image pixel coordinates.
+
+    Args:
+        lon: Longitude in WGS84 decimal degrees.
+        lat: Latitude in WGS84 decimal degrees.
+        meta: GeoTIFF metadata for affine conversion to pixels.
+        wgs84_to_image: Optional transform from WGS84 to image CRS.
+        utm_fallback: Optional ``(zone, northern_hemisphere)`` fallback.
+
+    Returns:
+        Pixel coordinates as ``(x, y)`` in full-image space.
+    """
     if wgs84_to_image is not None:
         x_geo, y_geo, _ = wgs84_to_image.TransformPoint(lon, lat, 0.0)
     elif utm_fallback is not None:
@@ -360,6 +424,14 @@ def _wgs84_tree_to_pixel(
 def _infer_utm_fallback_from_image_name(
     image_tif: Path,
 ) -> tuple[int, bool] | None:
+    """Infer fallback UTM zone metadata from the image filename.
+
+    Args:
+        image_tif: GeoTIFF path whose stem may contain ``utm<zone><n|s>``.
+
+    Returns:
+        Tuple of UTM zone and hemisphere flag, or ``None`` when unavailable.
+    """
     name = image_tif.stem.lower()
     match = re.search(r"utm(\d{1,2})([ns])", name)
     if match is None:
@@ -373,6 +445,14 @@ def _infer_utm_fallback_from_image_name(
 
 
 def _image_upper_left_wgs84(meta: GeoTiffMeta) -> tuple[float, float]:
+    """Get the GeoTIFF upper-left corner as WGS84 lon/lat.
+
+    Args:
+        meta: GeoTIFF metadata.
+
+    Returns:
+        Upper-left corner as ``(longitude, latitude)``.
+    """
     if not meta.crs_wkt:
         return meta.origin_x, meta.origin_y
 
@@ -389,6 +469,14 @@ def _image_upper_left_wgs84(meta: GeoTiffMeta) -> tuple[float, float]:
 def _build_wgs84_to_image_crs_transform(
     meta: GeoTiffMeta,
 ) -> osr.CoordinateTransformation | None:
+    """Create a transform from WGS84 into the image CRS when available.
+
+    Args:
+        meta: GeoTIFF metadata potentially containing a CRS WKT string.
+
+    Returns:
+        Coordinate transformation, or ``None`` when CRS metadata is absent.
+    """
     if not meta.crs_wkt:
         return None
 
@@ -398,6 +486,7 @@ def _build_wgs84_to_image_crs_transform(
 
 
 def _wgs84_srs() -> osr.SpatialReference:
+    """Create a WGS84 spatial reference in traditional GIS axis order."""
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(4326)
     if hasattr(srs, "SetAxisMappingStrategy"):
@@ -406,6 +495,17 @@ def _wgs84_srs() -> osr.SpatialReference:
 
 
 def _spatial_reference_from_wkt(wkt: str) -> osr.SpatialReference:
+    """Build a spatial reference from WKT in traditional GIS axis order.
+
+    Args:
+        wkt: CRS Well-Known Text string.
+
+    Returns:
+        Parsed spatial reference object.
+
+    Raises:
+        ValueError: If WKT parsing fails.
+    """
     srs = osr.SpatialReference()
     if srs.ImportFromWkt(wkt) != 0:
         raise ValueError("Could not parse GeoTIFF CRS WKT.")
@@ -502,6 +602,14 @@ def write_shapefile(tiles: list[dict[str, Any]], shp_path: Path) -> None:
 
 
 def _create_shapefile_fields(layer: ogr.Layer) -> None:
+    """Create label output fields on the target shapefile layer.
+
+    Args:
+        layer: Destination OGR layer.
+
+    Raises:
+        RuntimeError: If any field cannot be created.
+    """
     field_specs = [
         ("tile_id", ogr.OFTString, 48, 0),
         ("tree_id", ogr.OFTString, 48, 0),
@@ -527,6 +635,14 @@ def _create_shapefile_fields(layer: ogr.Layer) -> None:
 
 
 def _iter_label_rows(tiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Flatten nested tile payloads into normalized row dictionaries.
+
+    Args:
+        tiles: Tile payloads each containing a ``trees`` list.
+
+    Returns:
+        Normalized rows for CSV and shapefile export.
+    """
     rows: list[dict[str, Any]] = []
     for tile in tiles:
         tile_id = str(tile["tile_id"])

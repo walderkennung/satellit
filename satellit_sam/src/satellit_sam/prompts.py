@@ -1,3 +1,5 @@
+"""Prompt parsing and tile-coordinate projection utilities."""
+
 import csv
 import os
 import re

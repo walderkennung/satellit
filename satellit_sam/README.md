@@ -100,7 +100,7 @@ Generated outputs include:
 
 - `labels_tiles.csv` (flat weak-label rows with `bbox_x1,bbox_y1,bbox_x2,bbox_y2`)
 - `labels_tiles.shp` (WGS84 points with bbox attributes)
-- optional visualization PNGs under `visualizations/`
+- optional visualization TIFFs under `visualizations/`
 
 ## Full Command Reference
 

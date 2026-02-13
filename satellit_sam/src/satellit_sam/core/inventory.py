@@ -1,3 +1,5 @@
+"""Inventory loaders for CSV and shapefile-based tree records."""
+
 from __future__ import annotations
 
 import csv
@@ -46,13 +48,24 @@ class Inventory:
         tree_id_field="",
         species_field="",
         deduplicate_tree_id=True,
-    ):
+    ) -> None:
         """Load trees from CSV and map local offsets to WGS84 coordinates.
 
         Args:
             csv_path: Semicolon-delimited inventory file.
             x_origin: WGS84 longitude origin in decimal degrees.
             y_origin: WGS84 latitude origin in decimal degrees.
+            status_field: Column name containing tree status text.
+            status_filter: Optional case-insensitive status filter.
+            x_field: Column name for local X offset in meters.
+            y_field: Column name for local Y offset in meters.
+            dbh_field: Column name for DBH values.
+            dbh_unit: Unit used by ``dbh_field`` values.
+            min_dbh_cm: Minimum DBH threshold in centimeters.
+            max_dbh_cm: Maximum DBH threshold in centimeters (<=0 disables upper bound).
+            tree_id_field: Column name for tree identifier values.
+            species_field: Column name for species values.
+            deduplicate_tree_id: Whether to deduplicate by tree id after loading.
         """
         self.trees = []
         with csv_path.open("r", encoding="utf-8-sig", newline="") as f:
@@ -117,12 +130,27 @@ class Inventory:
         tree_id_field="",
         species_field="",
         deduplicate_tree_id=True,
-    ):
-        """
-        Load trees from a shapefile via GDAL/OGR.
+    ) -> None:
+        """Load trees from a shapefile via GDAL/OGR.
 
         Geometry coordinates are transformed to WGS84 (EPSG:4326) and stored as
         tree longitude/latitude.
+
+        Args:
+            shp_path: Path to source shapefile.
+            status_field: Field name containing tree status text.
+            status_filter: Optional case-insensitive status filter.
+            dbh_field: Field name for DBH values.
+            dbh_unit: Unit used by ``dbh_field`` values.
+            min_dbh_cm: Minimum DBH threshold in centimeters.
+            max_dbh_cm: Maximum DBH threshold in centimeters (<=0 disables upper bound).
+            tree_id_field: Field name for tree identifier values.
+            species_field: Field name for species values.
+            deduplicate_tree_id: Whether to deduplicate by tree id after loading.
+
+        Raises:
+            FileNotFoundError: If the shapefile cannot be opened.
+            ValueError: If the first layer cannot be read.
         """
         previous_shx_restore = gdal.GetConfigOption("SHAPE_RESTORE_SHX")
         gdal.SetConfigOption("SHAPE_RESTORE_SHX", "YES")
@@ -210,9 +238,10 @@ class Inventory:
         if deduplicate_tree_id:
             self.deduplicate_trees()
 
-    def deduplicate_trees(self):
-        """
-        Keep one row per TreeID with highest DBH. Empty TreeID rows are kept as-is.
+    def deduplicate_trees(self) -> None:
+        """Keep one row per tree id, preferring the highest DBH record.
+
+        Rows without a tree id are retained unchanged.
         """
         by_id: dict[str, Tree] = {}
         no_id_rows: list[Tree] = []

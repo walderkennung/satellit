@@ -1,3 +1,5 @@
+"""Visualization helpers for SAM detection and mask overlays."""
+
 from typing import Optional
 
 import numpy as np

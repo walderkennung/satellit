@@ -1,3 +1,5 @@
+"""GeoTIFF metadata loading utilities for geospatial workflows."""
+
 from dataclasses import dataclass
 from pathlib import Path
 

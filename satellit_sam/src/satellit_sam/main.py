@@ -1,3 +1,5 @@
+"""Top-level orchestration for tiling and SAM mask prediction."""
+
 import asyncio
 from pathlib import Path
 
