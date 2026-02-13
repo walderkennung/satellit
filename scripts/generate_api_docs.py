@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
 import re
 import shutil
 import subprocess
@@ -423,28 +424,6 @@ def render_callable_block(
         lines.append("")
 
 
-def derive_site_route_from_output(
-    output_dir: Path, content_dir: Path, fallback_name: str
-) -> str:
-    route = None
-    try:
-        relative = output_dir.relative_to(content_dir)
-        route = relative.as_posix()
-    except ValueError:
-        parts = output_dir.parts
-        if "content" in parts:
-            content_idx = parts.index("content")
-            after_content = Path(*parts[content_idx + 1 :]).as_posix()
-            route = after_content
-
-    if not route:
-        route = fallback_name.strip("/")
-
-    route = route.strip("/")
-    if not route:
-        return "/"
-    return f"/{route}"
-
 
 def parse_module(source_file: Path, module_name: str) -> ModuleDoc:
     tree = ast.parse(source_file.read_text(encoding="utf-8"))
@@ -512,11 +491,18 @@ def parse_module(source_file: Path, module_name: str) -> ModuleDoc:
     )
 
 
-def write_module_page(
-    module: ModuleDoc, output_file: Path, api_index_route: str
-) -> None:
+def relative_markdown_link(from_file: Path, to_file: Path) -> str:
+    """Build a relative docmd link between two markdown files without extensions."""
+    relative = Path(os.path.relpath(to_file.with_suffix(""), start=from_file.parent))
+    link = relative.as_posix()
+    if not link.startswith((".", "#")):
+        return f"./{link}"
+    return link
+
+
+def write_module_page(module: ModuleDoc, output_file: Path, index_file: Path) -> None:
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    back_link = api_index_route
+    back_link = relative_markdown_link(from_file=output_file, to_file=index_file)
     cwd = Path.cwd().resolve()
     if module.source_file.is_relative_to(cwd):
         source_display = module.source_file.relative_to(cwd).as_posix()
@@ -592,9 +578,7 @@ def write_module_page(
     output_file.write_text("\n".join(lines), encoding="utf-8")
 
 
-def write_index(
-    modules: list[ModuleDoc], output_dir: Path, api_index_route: str
-) -> Path:
+def write_index(modules: list[ModuleDoc], output_dir: Path) -> Path:
     index_path = output_dir / "index.md"
 
     lines: list[str] = [
@@ -613,11 +597,8 @@ def write_index(
 
     if modules:
         for module in modules:
-            module_path = module.name.replace(".", "/")
-            if api_index_route == "/":
-                module_link = f"/{module_path}"
-            else:
-                module_link = f"{api_index_route}/{module_path}"
+            module_path = output_dir / (module.name.replace(".", "/") + ".md")
+            module_link = relative_markdown_link(from_file=index_path, to_file=module_path)
             lines.append(f"- [`{module.name}`]({module_link})")
     else:
         lines.append("_No modules found._")
@@ -671,8 +652,6 @@ def main() -> None:
 
     source_dir = args.source_dir.resolve()
     output_dir = args.output_dir.resolve()
-    content_dir = args.content_dir.resolve()
-
     if not source_dir.exists():
         raise SystemExit(f"Source directory does not exist: {source_dir}")
 
@@ -688,15 +667,14 @@ def main() -> None:
         modules.append(parse_module(source_file=source_file, module_name=module_name))
 
     modules.sort(key=lambda module: module.name)
-    api_index_route = derive_site_route_from_output(
-        output_dir=output_dir, content_dir=content_dir, fallback_name=output_dir.name
-    )
-    write_index(modules=modules, output_dir=output_dir, api_index_route=api_index_route)
+    write_index(modules=modules, output_dir=output_dir)
 
     for module in modules:
         module_output = output_dir / (module.name.replace(".", "/") + ".md")
         write_module_page(
-            module=module, output_file=module_output, api_index_route=api_index_route
+            module=module,
+            output_file=module_output,
+            index_file=output_dir / "index.md",
         )
 
     print(f"Generated {len(modules)} API module page(s) in {output_dir}")
