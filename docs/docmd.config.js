@@ -5,7 +5,7 @@ const contentDir = path.join(__dirname, 'content');
 const apiModulesDir = path.join(contentDir, 'api', 'satellit_sam');
 
 function getApiNavigationChildren() {
-  const children = [{ title: 'Python API Overview', path: 'api', icon: 'file-text' }];
+  const children = [];
 
   if (!fs.existsSync(apiModulesDir)) {
     return children;
@@ -82,19 +82,16 @@ module.exports = {
   navigation: [
     { title: 'Introduction', path: '/', icon: 'home' },
     {
-      title: 'CLI',
+      title: 'CLI Application',
       icon: 'terminal',
-      collapsible: true,
-      children: [
-        { title: 'CLI Application', path: 'cli/application', icon: 'terminal-square' },
-      ],
+      path: 'cli/index',
     },
     {
       title: 'Knowledge Base',
       icon: 'book-open',
       collapsible: true,
+      path: 'knowledgebase/index',
       children: [
-        { title: 'SAM3 Transfer Learning Overview', path: 'knowledgebase/fine_tuning_transfer_learning', icon: 'map' },
         { title: 'Goals and Scope', path: 'knowledgebase/fine_tuning_transfer_learning/goals_scope', icon: 'target' },
         { title: 'Transfer Learning Fundamentals', path: 'knowledgebase/fine_tuning_transfer_learning/fundamentals', icon: 'book-text' },
         { title: 'Phased Strategy', path: 'knowledgebase/fine_tuning_transfer_learning/phased_strategy', icon: 'route' },
@@ -110,6 +107,7 @@ module.exports = {
       title: 'API Reference',
       icon: 'code',
       collapsible: true,
+      path: 'api/index',
       children: apiNavigationChildren,
     },
     { title: 'GitHub', path: 'https://github.com/walderkennung/satellit', icon: 'github', external: true },

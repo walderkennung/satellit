@@ -4,7 +4,7 @@ This repository contains the `satellit_sam` CLI application and the project docu
 
 ## Repository Layout
 
-- `satellit_sam/`: SAM-based image processing and weak-label generation code (Pixi project)
+- [`satellit_sam/`](satellit_sam/): SAM-based image processing and weak-label generation code (Pixi project)
 - `docs/`: documentation site content and configuration (Bun + docmd)
 - `data/`: local data inputs used during experiments/runs
 - `output/`: generated outputs
