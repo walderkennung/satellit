@@ -391,13 +391,9 @@ def render_callable_block(
     lines.extend(signature_lines)
     lines.append("```")
     lines.append("")
-    lines.append(parsed.description)
-    lines.append("")
 
     if parsed.arguments or parsed.returns or parsed.exceptions:
-        lines.append("<details>")
-        lines.append("<summary>Arguments, Returns, and Exceptions</summary>")
-        lines.append("")
+        lines.append(f"::: collapsible {parsed.description}")
 
         if parsed.arguments:
             lines.append("#### Arguments")
@@ -420,9 +416,11 @@ def render_callable_block(
                 lines.append(f"- `{item}`")
             lines.append("")
 
-        lines.append("</details>")
-        lines.append("")
+        lines.append(":::")
+    else:
+        lines.append(parsed.description)
 
+    lines.append("")
 
 
 def parse_module(source_file: Path, module_name: str) -> ModuleDoc:
@@ -522,17 +520,11 @@ def write_module_page(module: ModuleDoc, output_file: Path, index_file: Path) ->
         "",
         f"> Auto-generated from `{source_display}` by `satellit_sam/scripts/generate_api_docs.py`.",
         "",
+        module.docstring if module.docstring else "_No module docstring._",
+        "",
         f"[Back to API index]({back_link})",
         "",
     ]
-
-    lines.append("## Module Docstring")
-    lines.append("")
-    if module.docstring:
-        lines.append(module.docstring)
-    else:
-        lines.append("_No module docstring._")
-    lines.append("")
 
     lines.append("## Functions")
     lines.append("")
@@ -598,7 +590,9 @@ def write_index(modules: list[ModuleDoc], output_dir: Path) -> Path:
     if modules:
         for module in modules:
             module_path = output_dir / (module.name.replace(".", "/") + ".md")
-            module_link = relative_markdown_link(from_file=index_path, to_file=module_path)
+            module_link = relative_markdown_link(
+                from_file=index_path, to_file=module_path
+            )
             lines.append(f"- [`{module.name}`]({module_link})")
     else:
         lines.append("_No modules found._")
