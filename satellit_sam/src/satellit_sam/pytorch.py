@@ -1,3 +1,5 @@
+"""PyTorch initialization helpers for the SAM runtime."""
+
 import logging
 from dataclasses import dataclass
 
@@ -8,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PytorchInstance:
+    """Runtime details about the selected PyTorch backend device."""
+
     device: str
     cuda_available: bool
     mps_available: bool
@@ -27,6 +31,11 @@ class PytorchInstance:
 
 
 def init() -> PytorchInstance:
+    """Initialize PyTorch defaults and return backend availability details.
+
+    Returns:
+        PyTorch runtime information including selected device and accelerator support.
+    """
     # Initialize PyTorch
     torch.set_default_dtype(torch.float32)
 
@@ -34,6 +43,7 @@ def init() -> PytorchInstance:
     _original_as_tensor = torch.as_tensor
 
     def _patched_as_tensor(data, dtype=None, device=None):
+        """Downgrade unsupported MPS float64 tensors to float32 before casting."""
         if device is not None and "mps" in str(device):
             if dtype == torch.float64:
                 dtype = torch.float32

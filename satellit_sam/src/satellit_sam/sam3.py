@@ -1,3 +1,5 @@
+"""Singleton SAM3 model wrapper and inference helpers."""
+
 import torch
 import torchvision
 from transformers import Sam3Model, Sam3Processor

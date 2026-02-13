@@ -1,3 +1,5 @@
+"""Image data model and I/O helpers used across SAM workflows."""
+
 from dataclasses import dataclass
 from pathlib import Path
 
