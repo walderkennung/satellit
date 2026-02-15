@@ -68,6 +68,8 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 - For CUDA on Linux: `pixi install -e cuda` and `pixi run -e cuda predict-masks`.
 - `satellit -- label weak` writes per-tree weak-label crown bounding boxes (`bbox_x1,bbox_y1,bbox_x2,bbox_y2`) into `labels_tiles.csv` and `labels_tiles.shp`.
 - `satellit -- label by-bounding-boxes --weak-labels-csv <labels_tiles.csv>` consumes those stored tile-local bboxes as SAM box prompts.
+- `satellit -- predict image-masks --image <image>` runs SAM mask prediction on the full image from `--text`, `--bbox`, and/or `--point` prompts and writes `image_masks_visualization.png` plus raw masks at `masks/image_masks.npz`.
+- `satellit -- predict image-masks --model <sam3|sam2>` selects the SAM backend; default is `sam3` when omitted. `--text` is only supported with `sam3`. For current SAM3 processor support, point prompts are approximated as small box prompts.
 - Documentation site tasks (run from `docs/`):
 - `bun run gen:api` (generate API docs via Pixi task)
 - `bun run dev` (generate API docs, then run docmd dev server)

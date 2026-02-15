@@ -3,10 +3,12 @@
 import typer
 
 from . import label as label_cli
+from . import predict as predict_cli
 from . import process as process_cli
 
 app = typer.Typer(no_args_is_help=True)
 app.add_typer(label_cli.app, name="label")
+app.add_typer(predict_cli.app, name="predict")
 app.add_typer(process_cli.app, name="process")
 
 

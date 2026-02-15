@@ -44,6 +44,7 @@ Command tree:
 
 - `label weak`
 - `label by-bounding-boxes`
+- `predict image-masks`
 
 Global options:
 
@@ -75,6 +76,46 @@ pixi run satellit -- label by-bounding-boxes \
 Notes:
 
 - `--weak-labels-csv` can load per-tree tile-local bboxes from `label weak` output (`labels_tiles.csv`).
+
+### `predict image-masks`
+
+Run SAM mask prediction on one input image:
+
+```bash
+pixi run satellit -- predict image-masks \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --output-path output/predict \
+  --text "tree crowns"
+```
+
+With point and bounding-box prompts in image coordinates (default `sam3`):
+
+```bash
+pixi run satellit -- predict image-masks \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --point 1200,900 \
+  --bbox 1100,800,1500,1200
+```
+
+Use SAM2 explicitly:
+
+```bash
+pixi run satellit -- predict image-masks \
+  --model sam2 \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --point 1200,900
+```
+
+Note:
+
+- `--model` accepts `sam3` (default) and `sam2`.
+- `--text` is supported only for `sam3`.
+- With the current `transformers` SAM3 processor API, point prompts are approximated as small box prompts.
+
+Outputs are written under `--output-path`:
+
+- `image_masks_visualization.png` (mask visualization)
+- `masks/image_masks.npz` (predicted masks, boxes, scores, image_size)
 
 ### `label weak`
 

@@ -58,6 +58,47 @@ def parse_bbox_prompts(raw_bboxes: list[str] | None) -> list[tuple[float, float,
     return [parse_bbox_prompt(raw_bbox) for raw_bbox in raw_bboxes]
 
 
+def parse_point_prompt(raw_point: str) -> tuple[float, float]:
+    """Parse one point prompt in ``x,y`` format.
+
+    Args:
+        raw_point: Raw prompt string from CLI input.
+
+    Returns:
+        Parsed point tuple ``(x, y)``.
+
+    Raises:
+        ValueError: If formatting or coordinate values are invalid.
+    """
+    parts = [part.strip() for part in raw_point.split(BBOX_DELIMITER)]
+    if len(parts) != 2:
+        raise ValueError(f"Invalid point '{raw_point}'. Expected format: x,y.")
+
+    try:
+        x, y = (float(value) for value in parts)
+    except ValueError as err:
+        raise ValueError(
+            f"Invalid point '{raw_point}'. Coordinates must be numeric."
+        ) from err
+
+    return x, y
+
+
+def parse_point_prompts(raw_points: list[str] | None) -> list[tuple[float, float]]:
+    """Parse repeatable point prompt options.
+
+    Args:
+        raw_points: Raw ``--point`` values from CLI options.
+
+    Returns:
+        Parsed point prompts.
+    """
+    if not raw_points:
+        return []
+
+    return [parse_point_prompt(raw_point) for raw_point in raw_points]
+
+
 def parse_tile_origin(tile_path: str) -> tuple[int, int]:
     """Extract tile origin ``(x, y)`` from a tile filename.
 
@@ -191,3 +232,34 @@ def project_bboxes_to_tile(
         )
 
     return tile_bboxes
+
+
+def project_points_to_tile(
+    image_points: list[tuple[float, float]],
+    tile_origin: tuple[int, int],
+    tile_size: tuple[int, int],
+) -> list[tuple[float, float]]:
+    """Project image-space points into one tile as tile-space points.
+
+    Args:
+        image_points: Points in full-image coordinates.
+        tile_origin: Tile origin ``(x, y)`` in full-image coordinates.
+        tile_size: Tile size ``(width, height)`` in pixels.
+
+    Returns:
+        Tile-local points that fall inside the tile.
+    """
+    tile_x, tile_y = tile_origin
+    tile_width, tile_height = tile_size
+    tile_x_end = tile_x + tile_width
+    tile_y_end = tile_y + tile_height
+
+    tile_points: list[tuple[float, float]] = []
+    for point_x, point_y in image_points:
+        if point_x < tile_x or point_y < tile_y:
+            continue
+        if point_x >= tile_x_end or point_y >= tile_y_end:
+            continue
+        tile_points.append((point_x - tile_x, point_y - tile_y))
+
+    return tile_points
