@@ -3,9 +3,11 @@
 import typer
 
 from . import label as label_cli
+from . import process as process_cli
 
 app = typer.Typer(no_args_is_help=True)
 app.add_typer(label_cli.app, name="label")
+app.add_typer(process_cli.app, name="process")
 
 
 def main(argv: list[str] | None = None) -> None:

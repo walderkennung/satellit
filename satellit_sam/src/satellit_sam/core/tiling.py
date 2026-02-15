@@ -3,6 +3,7 @@
 import json
 import os
 from dataclasses import dataclass
+from typing import Iterator
 
 import cv2
 import numpy as np
@@ -51,20 +52,38 @@ def _tile_geometries(
     Returns:
         Ordered tile windows covering the image.
     """
+    return list(
+        iter_tile_geometries(
+            image_shape=image_shape,
+            tile_size=tile_size,
+            overlap=overlap,
+        )
+    )
+
+
+def iter_tile_geometries(
+    image_shape: tuple[int, int],
+    tile_size: tuple[int, int],
+    overlap: tuple[int, int],
+) -> Iterator[TileGeometry]:
+    """Yield tile windows for an image.
+
+    Args:
+        image_shape: Full image size as ``(width, height)``.
+        tile_size: Tile size as ``(width, height)``.
+        overlap: Neighbor overlap as ``(x_overlap, y_overlap)``.
+
+    Yields:
+        Tile windows covering the input image in scanline order.
+    """
     x_tile_offset = tile_size[0] - overlap[0]
     y_tile_offset = tile_size[1] - overlap[1]
 
-    tile_positions = []
     for y_start in range(0, image_shape[1], y_tile_offset):
         for x_start in range(0, image_shape[0], x_tile_offset):
             y_end = min(y_start + tile_size[1], image_shape[1])
             x_end = min(x_start + tile_size[0], image_shape[0])
-
-            tile_positions.append(
-                TileGeometry(start=(x_start, y_start), end=(x_end, y_end))
-            )
-
-    return tile_positions
+            yield TileGeometry(start=(x_start, y_start), end=(x_end, y_end))
 
 
 def tile_image(
@@ -91,7 +110,7 @@ def tile_image(
     if isinstance(overlap, int):
         overlap = (overlap, overlap)
 
-    for tile_geo in _tile_geometries(
+    for tile_geo in iter_tile_geometries(
         image_shape=(total_width, total_height),
         tile_size=tile_size,
         overlap=overlap,
