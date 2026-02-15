@@ -59,6 +59,8 @@ class SamSingleton:
         point_labels: list[int] | None = None,
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
+        confidence_threshold: float = 0.5,
+        allow_low_confidence_fallback: bool = False,
     ) -> Image:
         """Generate and render segmentation predictions for one image.
 
@@ -71,6 +73,9 @@ class SamSingleton:
             point_labels: Optional per-point labels for the SAM processor.
             threshold: Score threshold used in SAM post-processing.
             mask_threshold: Pixel mask threshold used in SAM post-processing.
+            confidence_threshold: Minimum confidence required to keep detections.
+            allow_low_confidence_fallback: Whether to keep the top-scoring mask
+                when score filtering removes all detections.
 
         Returns:
             Annotated image with segmentation overlays.
@@ -84,6 +89,8 @@ class SamSingleton:
             point_labels=point_labels,
             threshold=threshold,
             mask_threshold=mask_threshold,
+            confidence_threshold=confidence_threshold,
+            allow_low_confidence_fallback=allow_low_confidence_fallback,
         )
 
         if text:
@@ -106,6 +113,8 @@ class SamSingleton:
         point_labels: list[int] | None = None,
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
+        confidence_threshold: float = 0.5,
+        allow_low_confidence_fallback: bool = False,
     ) -> sv.Detections:
         """Generate segmentation detections for one image.
 
@@ -118,6 +127,9 @@ class SamSingleton:
             point_labels: Optional per-point labels for the SAM processor.
             threshold: Score threshold used in SAM post-processing.
             mask_threshold: Pixel mask threshold used in SAM post-processing.
+            confidence_threshold: Minimum confidence required to keep detections.
+            allow_low_confidence_fallback: Whether to keep the top-scoring mask
+                when score filtering removes all detections.
 
         Returns:
             Filtered detections including masks, boxes, and confidence scores.
@@ -190,7 +202,18 @@ class SamSingleton:
                 return detections
             if detections.confidence is None:
                 return detections
-            return detections[detections.confidence > 0.5]
+            filtered = detections[detections.confidence >= confidence_threshold]
+            if len(filtered) > 0:
+                return filtered
+            if allow_low_confidence_fallback:
+                top_index = int(np.argmax(detections.confidence))
+                print(
+                    "Note: no detections above confidence "
+                    f"{confidence_threshold:.3f}; "
+                    "using highest-confidence mask for visualization."
+                )
+                return detections[np.array([top_index])]
+            return filtered
 
         post_processed_masks = self.processor.post_process_masks(
             outputs.pred_masks,
@@ -205,7 +228,18 @@ class SamSingleton:
             return detections
         if detections.confidence is None:
             return detections
-        return detections[detections.confidence > 0.5]
+        filtered = detections[detections.confidence >= confidence_threshold]
+        if len(filtered) > 0:
+            return filtered
+        if allow_low_confidence_fallback:
+            top_index = int(np.argmax(detections.confidence))
+            print(
+                "Note: no detections above confidence "
+                f"{confidence_threshold:.3f}; "
+                "using highest-confidence mask for visualization."
+            )
+            return detections[np.array([top_index])]
+        return filtered
 
     @staticmethod
     def _build_box_labels(

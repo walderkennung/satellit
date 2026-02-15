@@ -67,6 +67,15 @@ def image_masks(
             help="SAM model version to use: sam3 (default) or sam2.",
         ),
     ] = "sam3",
+    threshold: Annotated[
+        float,
+        typer.Option(
+            "--threshold",
+            min=0.0,
+            max=1.0,
+            help="Confidence threshold for keeping predicted masks (0.0-1.0).",
+        ),
+    ] = 0.5,
 ) -> None:
     """Predict and visualize image masks from text, bbox, and/or point prompts.
 
@@ -77,6 +86,7 @@ def image_masks(
         bbox_prompts: Optional image-space bbox prompts.
         point_prompts: Optional image-space point prompts.
         model: SAM model version selector.
+        threshold: Confidence threshold for keeping predicted masks.
 
     Raises:
         typer.BadParameter: If prompt arguments are invalid.
@@ -110,6 +120,7 @@ def image_masks(
             bbox_prompts=parsed_bbox_prompts,
             point_prompts=parsed_point_prompts,
             model=model,
+            threshold=threshold,
         )
     except ValueError as err:
         raise typer.BadParameter(

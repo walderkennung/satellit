@@ -16,6 +16,7 @@ def predict_image_masks(
     bbox_prompts: list[tuple[float, float, float, float]],
     point_prompts: list[tuple[float, float]],
     model: Literal["sam3", "sam2"] = "sam3",
+    threshold: float = 0.5,
 ) -> None:
     """Predict image masks from one image and save outputs.
 
@@ -32,6 +33,7 @@ def predict_image_masks(
         bbox_prompts: Optional image-space bbox prompts.
         point_prompts: Optional image-space point prompts.
         model: SAM model family to use (``sam3`` or ``sam2``).
+        threshold: Confidence threshold for keeping predicted masks.
 
     Raises:
         ValueError: If no prompt is provided.
@@ -66,6 +68,9 @@ def predict_image_masks(
         text=text_prompt,
         boxes=bbox_prompts or None,
         points=point_prompts or None,
+        threshold=0.0,
+        confidence_threshold=threshold,
+        allow_low_confidence_fallback=True,
     )
     ann_image = annotate(image=image, detections=detections, label=label)
 
