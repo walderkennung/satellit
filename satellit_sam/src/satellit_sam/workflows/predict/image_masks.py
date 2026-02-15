@@ -7,6 +7,7 @@ import numpy as np
 
 from satellit_sam.core import Image
 from satellit_sam.plot import annotate
+from satellit_sam.prompts import parse_tile_origin, tile_id_from_origin
 
 
 def predict_image_masks(
@@ -17,6 +18,9 @@ def predict_image_masks(
     point_prompts: list[tuple[float, float]],
     model: Literal["sam3", "sam2"] = "sam3",
     threshold: float = 0.5,
+    weak_label_bboxes_by_tile: (
+        dict[str, list[tuple[float, float, float, float]]] | None
+    ) = None,
 ) -> None:
     """Predict image masks from one image and save outputs.
 
@@ -34,15 +38,25 @@ def predict_image_masks(
         point_prompts: Optional image-space point prompts.
         model: SAM model family to use (``sam3`` or ``sam2``).
         threshold: Confidence threshold for keeping predicted masks.
+        weak_label_bboxes_by_tile: Optional tile-local bboxes keyed by tile id.
 
     Raises:
         ValueError: If no prompt is provided.
     """
     from satellit_sam.sam3 import get_sam
 
-    if text_prompt is None and not bbox_prompts and not point_prompts:
+    effective_bbox_prompts = list(bbox_prompts)
+    if weak_label_bboxes_by_tile:
+        tile_origin = parse_tile_origin(str(image_path))
+        tile_id = tile_id_from_origin(tile_origin)
+        effective_bbox_prompts.extend(weak_label_bboxes_by_tile.get(tile_id, []))
+
+    if text_prompt is None and not effective_bbox_prompts and not point_prompts:
         raise ValueError(
-            "At least one prompt is required: --text, --bbox, and/or --point."
+            (
+                "At least one prompt is required: --text, --bbox, --point, "
+                "and/or a matching --weak-labels-csv entry for the input tile."
+            )
         )
 
     output_path.mkdir(parents=True, exist_ok=True)
@@ -56,7 +70,7 @@ def predict_image_masks(
 
     if text_prompt:
         label = text_prompt
-    elif bbox_prompts:
+    elif effective_bbox_prompts:
         label = "bbox"
     elif point_prompts:
         label = "point"
@@ -66,7 +80,7 @@ def predict_image_masks(
     detections = sam.predict_detections(
         image=image,
         text=text_prompt,
-        boxes=bbox_prompts or None,
+        boxes=effective_bbox_prompts or None,
         points=point_prompts or None,
         threshold=0.0,
         confidence_threshold=threshold,
