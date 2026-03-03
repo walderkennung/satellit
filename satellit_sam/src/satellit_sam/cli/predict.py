@@ -39,7 +39,7 @@ def image_masks(
         str | None,
         typer.Option(
             "--text",
-            help="Text prompt for SAM (e.g. 'tree crowns').",
+            help="Text prompt for segmentation filtering (e.g. 'tree').",
         ),
     ] = None,
     bbox_prompts: Annotated[
@@ -65,10 +65,13 @@ def image_masks(
         ),
     ] = None,
     model: Annotated[
-        Literal["sam3", "sam2"],
+        Literal["sam3", "sam2", "dinov3"],
         typer.Option(
             "--model",
-            help="SAM model version to use: sam3 (default) or sam2.",
+            help=(
+                "Model backend to use: sam3 (default), sam2, or dinov3. "
+                "dinov3 currently supports --text only."
+            ),
         ),
     ] = "sam3",
     threshold: Annotated[
@@ -78,6 +81,31 @@ def image_masks(
             min=0.0,
             max=1.0,
             help="Confidence threshold for keeping predicted masks (0.0-1.0).",
+        ),
+    ] = 0.5,
+    tile_size: Annotated[
+        int,
+        typer.Option(
+            "--tile-size",
+            min=1,
+            help="Tile size in pixels for streamed prediction.",
+        ),
+    ] = 640,
+    tile_overlap: Annotated[
+        int,
+        typer.Option(
+            "--tile-overlap",
+            min=0,
+            help="Overlap between neighboring prediction tiles in pixels.",
+        ),
+    ] = 64,
+    merge_iou_threshold: Annotated[
+        float,
+        typer.Option(
+            "--merge-iou-threshold",
+            min=0.0,
+            max=1.0,
+            help="IoU threshold for global cross-tile NMS merge (0.0-1.0).",
         ),
     ] = 0.5,
     weak_labels_csv: Annotated[
@@ -103,8 +131,11 @@ def image_masks(
         text_prompt: Optional text prompt.
         bbox_prompts: Optional image-space bbox prompts.
         point_prompts: Optional image-space point prompts.
-        model: SAM model version selector.
+        model: Segmentation model version selector.
         threshold: Confidence threshold for keeping predicted masks.
+        tile_size: Tile size in pixels for streamed prediction.
+        tile_overlap: Tile overlap in pixels for streamed prediction.
+        merge_iou_threshold: IoU threshold used for cross-tile NMS merge.
         weak_labels_csv: Optional weak-label CSV with tile-local prompts.
 
     Raises:
@@ -147,6 +178,29 @@ def image_masks(
             "--text is not supported with model 'sam2'. Use --bbox and/or --point.",
             param_hint="--model / --text",
         )
+    if tile_overlap >= tile_size:
+        raise typer.BadParameter(
+            "`--tile-overlap` must be smaller than `--tile-size`.",
+            param_hint="--tile-size / --tile-overlap",
+        )
+    if model == "dinov3":
+        if (
+            parsed_bbox_prompts
+            or parsed_point_prompts
+            or weak_label_bboxes_by_tile is not None
+        ):
+            raise typer.BadParameter(
+                (
+                    "Model 'dinov3' supports --text prompts only. "
+                    "Remove --bbox, --point, and --weak-labels-csv."
+                ),
+                param_hint="--model / --text / --bbox / --point / --weak-labels-csv",
+            )
+        if text_prompt is None:
+            raise typer.BadParameter(
+                "Model 'dinov3' requires --text.",
+                param_hint="--model / --text",
+            )
 
     try:
         predict_image_masks(
@@ -157,10 +211,16 @@ def image_masks(
             point_prompts=parsed_point_prompts,
             model=model,
             threshold=threshold,
+            tile_size=tile_size,
+            tile_overlap=tile_overlap,
+            merge_iou_threshold=merge_iou_threshold,
             weak_label_bboxes_by_tile=weak_label_bboxes_by_tile,
         )
     except ValueError as err:
         raise typer.BadParameter(
             str(err),
-            param_hint="--model / --text / --bbox / --point / --weak-labels-csv",
+            param_hint=(
+                "--model / --text / --bbox / --point / --weak-labels-csv "
+                "/ --tile-size / --tile-overlap / --merge-iou-threshold"
+            ),
         ) from err

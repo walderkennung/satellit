@@ -1,5 +1,6 @@
-"""SAM model wrappers and inference helpers for SAM3 and SAM2."""
+"""Segmentation model wrappers and inference helpers for SAM and DINOv3."""
 
+import os
 from collections.abc import Sequence
 from typing import Literal
 
@@ -7,19 +8,29 @@ import numpy as np
 import torch
 import torchvision
 import supervision as sv
-from transformers import Sam2Model, Sam2Processor, Sam3Model, Sam3Processor
+from transformers import (
+    EomtDinov3ForUniversalSegmentation,
+    EomtImageProcessor,
+    Sam2Model,
+    Sam2Processor,
+    Sam3Model,
+    Sam3Processor,
+)
 
 from satellit_sam.core import Image
 from satellit_sam.plot import annotate, from_sam
 
 POINT_PROMPT_BOX_RADIUS_PX = 8.0
-SamVersion = Literal["sam3", "sam2"]
+SAM3_MODEL_ID = "facebook/sam3"
+SAM2_MODEL_ID = "facebook/sam2-hiera-large"
+DINOv3_MODEL_ID_DEFAULT = "tue-mps/eomt-dinov3-coco-panoptic-base-640"
+ModelVersion = Literal["sam3", "sam2", "dinov3"]
 
 
 class SamSingleton:
-    """Singleton wrapper for loading and running a selected SAM model."""
+    """Singleton wrapper for loading and running a selected segmentation model."""
 
-    def __init__(self, model_name: SamVersion = "sam3"):
+    def __init__(self, model_name: ModelVersion = "sam3"):
         """Initialize model, processor, and device-specific settings."""
         self.model_name = model_name
         if torch.cuda.is_available():
@@ -34,17 +45,23 @@ class SamSingleton:
             self.device = "cpu"
 
         if self.model_name == "sam3":
-            self.model = Sam3Model.from_pretrained("facebook/sam3").to(self.device)
-            self.processor = Sam3Processor.from_pretrained("facebook/sam3")
+            self.model = Sam3Model.from_pretrained(SAM3_MODEL_ID).to(self.device)
+            self.processor = Sam3Processor.from_pretrained(SAM3_MODEL_ID)
+        elif self.model_name == "sam2":
+            self.model = Sam2Model.from_pretrained(SAM2_MODEL_ID).to(self.device)
+            self.processor = Sam2Processor.from_pretrained(SAM2_MODEL_ID)
         else:
-            self.model = Sam2Model.from_pretrained("facebook/sam2-hiera-large").to(
-                self.device
+            dinov3_model_id = os.getenv(
+                "SATELLIT_DINOV3_MODEL_ID", DINOv3_MODEL_ID_DEFAULT
             )
-            self.processor = Sam2Processor.from_pretrained("facebook/sam2-hiera-large")
+            self.model = EomtDinov3ForUniversalSegmentation.from_pretrained(
+                dinov3_model_id
+            ).to(self.device)
+            self.processor = EomtImageProcessor.from_pretrained(dinov3_model_id)
 
     def print_debug_info(self):
         """Print runtime versions and CUDA availability for diagnostics."""
-        print("SAM model:", self.model_name)
+        print("Segmentation model:", self.model_name)
         print("PyTorch version:", torch.__version__)
         print("Torchvision version:", torchvision.__version__)
         print("CUDA is available:", torch.cuda.is_available())
@@ -145,9 +162,13 @@ class SamSingleton:
             raise ValueError(
                 "--text is not supported with model 'sam2'. Use --bbox and/or --point."
             )
+        if self.model_name == "dinov3" and (boxes or points):
+            raise ValueError(
+                "Model 'dinov3' supports --text prompts only. Remove --bbox and --point."
+            )
 
         processor_kwargs = {"images": image.data, "return_tensors": "pt"}
-        if text is not None:
+        if text is not None and self.model_name == "sam3":
             processor_kwargs["text"] = text
 
         effective_boxes: list[tuple[float, float, float, float]] = []
@@ -189,6 +210,16 @@ class SamSingleton:
         with torch.no_grad():
             outputs = self.model(**inputs)
 
+        if self.model_name == "dinov3":
+            return self._predict_dinov3_detections(
+                image=image,
+                outputs=outputs,
+                text=text,
+                threshold=threshold,
+                confidence_threshold=confidence_threshold,
+                allow_low_confidence_fallback=allow_low_confidence_fallback,
+            )
+
         if self.model_name == "sam3":
             results = self.processor.post_process_instance_segmentation(
                 outputs,
@@ -198,22 +229,11 @@ class SamSingleton:
             )[0]
 
             detections = from_sam(sam_result=results)
-            if len(detections) == 0:
-                return detections
-            if detections.confidence is None:
-                return detections
-            filtered = detections[detections.confidence >= confidence_threshold]
-            if len(filtered) > 0:
-                return filtered
-            if allow_low_confidence_fallback:
-                top_index = int(np.argmax(detections.confidence))
-                print(
-                    "Note: no detections above confidence "
-                    f"{confidence_threshold:.3f}; "
-                    "using highest-confidence mask for visualization."
-                )
-                return detections[np.array([top_index])]
-            return filtered
+            return self._apply_confidence_filter(
+                detections=detections,
+                confidence_threshold=confidence_threshold,
+                allow_low_confidence_fallback=allow_low_confidence_fallback,
+            )
 
         post_processed_masks = self.processor.post_process_masks(
             outputs.pred_masks,
@@ -223,11 +243,100 @@ class SamSingleton:
         )
         raw_masks = post_processed_masks[0]
         raw_scores = outputs.iou_scores[0] if outputs.iou_scores is not None else None
-        detections = self._sam2_masks_to_detections(raw_masks=raw_masks, raw_scores=raw_scores)
-        if len(detections) == 0:
+        detections = self._sam2_masks_to_detections(
+            raw_masks=raw_masks, raw_scores=raw_scores
+        )
+        return self._apply_confidence_filter(
+            detections=detections,
+            confidence_threshold=confidence_threshold,
+            allow_low_confidence_fallback=allow_low_confidence_fallback,
+        )
+
+    def _predict_dinov3_detections(
+        self,
+        image: Image,
+        outputs,
+        text: str | None,
+        threshold: float,
+        confidence_threshold: float,
+        allow_low_confidence_fallback: bool,
+    ) -> sv.Detections:
+        """Convert DINOv3 universal-segmentation outputs to detections."""
+        target_sizes = [(image.size[1], image.size[0])]
+        results = self.processor.post_process_instance_segmentation(
+            outputs=outputs,
+            target_sizes=target_sizes,
+            threshold=threshold,
+        )
+        if not results:
+            return sv.Detections.empty()
+
+        result = results[0]
+        segmentation = torch.as_tensor(result.get("segmentation"))
+        segments_info = result.get("segments_info", [])
+        if segmentation.numel() == 0 or not segments_info:
+            return sv.Detections.empty()
+
+        segmentation_np = segmentation.detach().cpu().numpy().astype(np.int32)
+        id2label = getattr(self.model.config, "id2label", {})
+        text_query = text.casefold().strip() if text else None
+
+        masks: list[np.ndarray] = []
+        boxes: list[tuple[float, float, float, float]] = []
+        confidences: list[float] = []
+        for segment in segments_info:
+            segment_id = int(segment.get("id", -1))
+            if segment_id < 0:
+                continue
+
+            label_id = int(segment.get("label_id", -1))
+            label_name = (
+                id2label.get(label_id)
+                or id2label.get(str(label_id))
+                or str(label_id)
+            )
+            if text_query is not None and text_query not in str(label_name).casefold():
+                continue
+
+            mask = segmentation_np == segment_id
+            ys, xs = np.where(mask)
+            if xs.size == 0 or ys.size == 0:
+                continue
+
+            x1 = float(xs.min())
+            y1 = float(ys.min())
+            x2 = float(xs.max() + 1)
+            y2 = float(ys.max() + 1)
+            score = float(segment.get("score", 1.0))
+
+            masks.append(mask)
+            boxes.append((x1, y1, x2, y2))
+            confidences.append(score)
+
+        if not masks:
+            return sv.Detections.empty()
+
+        detections = sv.Detections(
+            xyxy=np.asarray(boxes, dtype=np.float32),
+            confidence=np.asarray(confidences, dtype=np.float32),
+            mask=np.asarray(masks, dtype=bool),
+        )
+        return self._apply_confidence_filter(
+            detections=detections,
+            confidence_threshold=confidence_threshold,
+            allow_low_confidence_fallback=allow_low_confidence_fallback,
+        )
+
+    @staticmethod
+    def _apply_confidence_filter(
+        detections: sv.Detections,
+        confidence_threshold: float,
+        allow_low_confidence_fallback: bool,
+    ) -> sv.Detections:
+        """Filter detections by confidence with optional best-mask fallback."""
+        if len(detections) == 0 or detections.confidence is None:
             return detections
-        if detections.confidence is None:
-            return detections
+
         filtered = detections[detections.confidence >= confidence_threshold]
         if len(filtered) > 0:
             return filtered
@@ -357,10 +466,10 @@ class SamSingleton:
             mask=np.asarray(filtered_masks, dtype=bool),
         )
 
-_sam_instances: dict[SamVersion, SamSingleton] = {}
+_sam_instances: dict[ModelVersion, SamSingleton] = {}
 
 
-def get_sam(model_name: SamVersion = "sam3") -> SamSingleton:
+def get_sam(model_name: ModelVersion = "sam3") -> SamSingleton:
     """Return a cached SAM model wrapper for the selected model version."""
     if model_name not in _sam_instances:
         _sam_instances[model_name] = SamSingleton(model_name=model_name)

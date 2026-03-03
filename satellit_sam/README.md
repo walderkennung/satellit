@@ -79,7 +79,7 @@ Notes:
 
 ### `predict image-masks`
 
-Run SAM mask prediction on one input image:
+Run streamed tile mask prediction on one input image (default `--tile-size 640`, `--tile-overlap 64`):
 
 ```bash
 pixi run satellit -- predict image-masks \
@@ -106,10 +106,22 @@ pixi run satellit -- predict image-masks \
   --point 1200,900
 ```
 
+Use DINOv3 explicitly (text filtering only):
+
+```bash
+pixi run satellit -- predict image-masks \
+  --model dinov3 \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --text "tree"
+```
+
 Note:
 
-- `--model` accepts `sam3` (default) and `sam2`.
-- `--text` is supported only for `sam3`.
+- `--model` accepts `sam3` (default), `sam2`, and `dinov3`.
+- `--text` is supported for `sam3` and `dinov3` (not `sam2`).
+- `dinov3` currently supports `--text` only (no `--bbox`, `--point`, or `--weak-labels-csv`).
+- Prediction uses streamed image tiles by default; tune with `--tile-size` and `--tile-overlap`.
+- Cross-tile detections are merged globally with IoU NMS (`--merge-iou-threshold`, default `0.5`).
 - With the current `transformers` SAM3 processor API, point prompts are approximated as small box prompts.
 
 Outputs are written under `--output-path`:
@@ -147,7 +159,7 @@ Generated outputs include:
 
 Complete CLI docs (all commands/options/arguments) are in:
 
-- `../docs/content/cli/application.md`
+- `../docs/content/cli/index.md`
 
 ## Testing
 
