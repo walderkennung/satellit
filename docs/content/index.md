@@ -9,8 +9,8 @@ This site documents the SAM processing workflows and the `satellit_sam` CLI.
 
 ## Start Here
 
-- [CLI Application Reference](./cli/application.md)
-- [Knowledge Base Overview](./knowledgebase/fine_tuning_transfer_learning.md)
+- [CLI Application Reference](./cli/)
+- [Knowledge Base Overview](./knowledgebase/)
 
 ## Docs Commands
 

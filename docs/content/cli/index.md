@@ -17,9 +17,13 @@ No commands currently use positional arguments; all inputs are passed via option
 
 ```text
 satellit
-└── label
-    ├── weak
-    └── by-bounding-boxes
+├── label
+│   ├── weak
+│   └── by-bounding-boxes
+├── predict
+│   └── image-masks
+└── process
+    └── tiles
 ```
 
 ## Root Command: `satellit`
@@ -95,6 +99,7 @@ Options:
 | `--power-b`                | float                   | no       | `0.8`    | Power model exponent `b`.                                                    |
 | `--min-crown-radius-m`     | float                   | no       | `0.5`    | Lower clamp for crown radius.                                                |
 | `--max-crown-radius-m`     | float                   | no       | `15.0`   | Upper clamp for crown radius.                                                |
+| `--bbox-padding-px`        | float                   | no       | `4.0`    | Extra padding in pixels for each weak-label crown bounding box.              |
 | `--export-visualizations`  | flag                    | no       | `False`  | Export labeling visualization PNG files.                                     |
 | `--help`                   | flag                    | no       | -        | Show help and exit.                                                          |
 
@@ -148,3 +153,107 @@ pixi run satellit -- label by-bounding-boxes \
   --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
   --weak-labels-csv output/inventory_from_shp/labels_tiles.csv
 ```
+
+## Command Group: `predict`
+
+Usage:
+
+```bash
+pixi run satellit -- predict --help
+```
+
+Subcommands:
+
+- `image-masks`
+
+## Command: `predict image-masks`
+
+Usage:
+
+```bash
+pixi run satellit -- predict image-masks --image <PATH> [OPTIONS]
+```
+
+Description: Predict and visualize image masks from text, bbox, and/or point prompts.
+Inference is streamed over image tiles by default.
+
+Validation rules:
+
+- Provide at least one prompt source from `--text`, `--bbox`, `--point`, or `--weak-labels-csv`.
+- `--model sam2` does not support `--text`.
+- `--model dinov3` requires `--text` and supports text prompts only (no `--bbox`, `--point`, or `--weak-labels-csv`).
+- `--tile-overlap` must be smaller than `--tile-size`.
+
+Options:
+
+| Option                  | Type                          | Required | Default          | Description                                                                             |
+| ----------------------- | ----------------------------- | -------- | ---------------- | --------------------------------------------------------------------------------------- |
+| `--image`               | file path                     | yes      | -                | Input image file.                                                                       |
+| `--output-path`         | path                          | no       | `output/predict` | Output directory for prediction artifacts.                                              |
+| `--text`                | str                           | no       | `None`           | Text prompt for segmentation filtering (for example `tree`).                           |
+| `--bbox`                | str (repeatable)              | no       | `None`           | Bounding-box prompt in `x1,y1,x2,y2` image coordinates.                                |
+| `--point`               | str (repeatable)              | no       | `None`           | Point prompt in `x,y` image coordinates. For `sam3`, points are approximated as boxes. |
+| `--model`               | enum (`sam3`,`sam2`,`dinov3`) | no       | `sam3`           | Segmentation backend. `dinov3` currently supports `--text` only.                       |
+| `--threshold`           | float (`0.0 <= x <= 1.0`)     | no       | `0.5`            | Confidence threshold for keeping predicted masks.                                       |
+| `--tile-size`           | int (`>= 1`)                  | no       | `640`            | Tile size in pixels for streamed prediction.                                            |
+| `--tile-overlap`        | int (`>= 0`)                  | no       | `64`             | Overlap between neighboring prediction tiles in pixels.                                 |
+| `--merge-iou-threshold` | float (`0.0 <= x <= 1.0`)     | no       | `0.5`            | IoU threshold used to merge cross-tile detections via global NMS.                      |
+| `--weak-labels-csv`     | file path                     | no       | `None`           | Weak-label CSV from `label weak` containing tile-local bboxes.                         |
+| `--help`                | flag                          | no       | -                | Show help and exit.                                                                     |
+
+Examples:
+
+```bash
+pixi run satellit -- predict image-masks \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --text "tree crowns" \
+  --tile-size 640 \
+  --tile-overlap 64
+```
+
+```bash
+pixi run satellit -- predict image-masks \
+  --model sam2 \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --point 1200,900
+```
+
+```bash
+pixi run satellit -- predict image-masks \
+  --model dinov3 \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --text "tree"
+```
+
+## Command Group: `process`
+
+Usage:
+
+```bash
+pixi run satellit -- process --help
+```
+
+Subcommands:
+
+- `tiles`
+
+## Command: `process tiles`
+
+Usage:
+
+```bash
+pixi run satellit -- process tiles --image <PATH> [OPTIONS]
+```
+
+Description: Split one image into tiles and save them to disk.
+
+Options:
+
+| Option          | Type          | Required | Default        | Description                                  |
+| --------------- | ------------- | -------- | -------------- | -------------------------------------------- |
+| `--image`       | file path     | yes      | -              | Input image file.                            |
+| `--output-path` | path          | no       | `output/tiles` | Output directory for generated tile outputs. |
+| `--tile-width`  | int (`>= 1`)  | no       | `2048`         | Tile width in pixels.                        |
+| `--tile-height` | int (`>= 1`)  | no       | `2048`         | Tile height in pixels.                       |
+| `--overlap`     | int (`>= 0`)  | no       | `64`           | Overlap between neighboring tiles in pixels. |
+| `--help`        | flag          | no       | -              | Show help and exit.                          |

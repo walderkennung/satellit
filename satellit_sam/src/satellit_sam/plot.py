@@ -27,7 +27,7 @@ COLOR = sv.ColorPalette.from_hex(
 
 
 def from_sam(sam_result: dict) -> sv.Detections:
-    """Convert a SAM post-processing result to ``supervision`` detections.
+    """Convert SAM post-processing output to ``supervision`` detections.
 
     Args:
         sam_result: Dictionary returned by SAM post-processing utilities.
@@ -35,15 +35,38 @@ def from_sam(sam_result: dict) -> sv.Detections:
     Returns:
         Structured detections with masks, boxes, and confidence scores.
     """
-    if len(sam_result["masks"]) == 0:
+    masks = sam_result.get("masks")
+    boxes = sam_result.get("boxes")
+    scores = sam_result.get("scores")
+    if masks is None or boxes is None or scores is None:
+        raise ValueError("SAM result must contain 'masks', 'boxes', and 'scores'.")
+
+    if len(masks) == 0:
         return sv.Detections.empty()
 
-    # Convert to supervision Detections
-    masks = np.array([m.cpu().numpy() for m in sam_result["masks"]])  # (N, H, W)
-    boxes = np.array([b.cpu().numpy() for b in sam_result["boxes"]])  # (N, 4) xyxy
-    scores = np.array([s.cpu().item() for s in sam_result["scores"]])  # (N,)
+    masks_tensor = torch.as_tensor(masks).to(dtype=torch.bool)
+    if masks_tensor.ndim == 3:
+        # ``sv.Detections.from_transformers`` expects (N, 1, H, W) when boxes exist.
+        masks_tensor = masks_tensor.unsqueeze(1)
+    elif masks_tensor.ndim != 4:
+        raise ValueError(
+            f"Expected SAM masks with 3 or 4 dimensions, got {masks_tensor.ndim}."
+        )
 
-    return sv.Detections(xyxy=boxes, confidence=scores, mask=masks)
+    scores_tensor = torch.as_tensor(scores, dtype=torch.float32)
+    labels_tensor = torch.zeros_like(scores_tensor, dtype=torch.int64)
+    boxes_tensor = torch.as_tensor(boxes, dtype=torch.float32)
+
+    detections = sv.Detections.from_transformers(
+        {
+            "masks": masks_tensor,
+            "boxes": boxes_tensor,
+            "scores": scores_tensor,
+            "labels": labels_tensor,
+        }
+    )
+    detections.class_id = None
+    return detections
 
 
 def annotate(

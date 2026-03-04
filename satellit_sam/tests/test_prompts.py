@@ -6,8 +6,11 @@ from satellit_sam.prompts import (
     load_weak_label_bboxes,
     parse_bbox_prompt,
     parse_bbox_prompts,
+    parse_point_prompt,
+    parse_point_prompts,
     parse_tile_origin,
     project_bboxes_to_tile,
+    project_points_to_tile,
 )
 
 
@@ -41,6 +44,31 @@ class TestBBoxParsing:
 
 
 @pytest.mark.unit
+class TestPointParsing:
+    """Tests for point prompt parsing."""
+
+    def test_parse_point_prompt(self):
+        assert parse_point_prompt("10,20") == (10.0, 20.0)
+
+    def test_parse_point_prompt_rejects_invalid_shape(self):
+        with pytest.raises(ValueError, match="Expected format"):
+            parse_point_prompt("10")
+
+    def test_parse_point_prompt_rejects_non_numeric(self):
+        with pytest.raises(ValueError, match="numeric"):
+            parse_point_prompt("10,foo")
+
+    def test_parse_point_prompts(self):
+        assert parse_point_prompts(["0,0", "20.5,30.5"]) == [
+            (0.0, 0.0),
+            (20.5, 30.5),
+        ]
+
+    def test_parse_point_prompts_none(self):
+        assert parse_point_prompts(None) == []
+
+
+@pytest.mark.unit
 class TestTileProjection:
     """Tests for tile filename parsing and bbox projection."""
 
@@ -69,6 +97,15 @@ class TestTileProjection:
         )
 
         assert tile_bboxes == []
+
+    def test_project_points_to_tile(self):
+        tile_points = project_points_to_tile(
+            image_points=[(10.0, 10.0), (120.0, 120.0), (128.0, 120.0)],
+            tile_origin=(64, 64),
+            tile_size=(64, 64),
+        )
+
+        assert tile_points == [(56.0, 56.0)]
 
 
 @pytest.mark.unit

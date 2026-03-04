@@ -134,7 +134,6 @@ def make_weak_labels(
         overlap=tile_overlap,
     )
     meter_to_px = _meter_to_pixel_scale(meta=meta)
-    projected_trees: list[dict[str, float]] = []
 
     for tree in inventory.trees:
         image_x, image_y = _wgs84_tree_to_pixel(
@@ -164,13 +163,6 @@ def make_weak_labels(
         else:
             crown_radius_m = max(default_crown_radius_m, min_crown_radius_m)
         crown_radius_px = crown_radius_m * meter_to_px
-        projected_trees.append(
-            {
-                "x_global": image_x,
-                "y_global": image_y,
-                "crown_radius_px": crown_radius_px,
-            }
-        )
 
         for tile in tiles:
             if not _circle_intersects_rect(
@@ -238,18 +230,18 @@ def make_weak_labels(
         visualization_outputs = export_visualizations_opencv(
             image_tif=image_tif,
             output_dir=output_dir,
-            projected_trees=projected_trees,
             tiles=visualization_tiles,
         )
     print(f"Weak labels written: {csv_path}")
     print(f"Weak labels written: {shp_path}")
     if visualization_outputs:
         print(
-            f"Weak labeling visualization (crowns): {visualization_outputs['visualization_crowns']}"
+            "Weak labeling visualizations (per tile): "
+            + visualization_outputs["visualization_tiles_dir"]
         )
         print(
-            "Weak labeling visualization (crowns+tiles): "
-            + visualization_outputs["visualization_crowns_tiles"]
+            "Weak labeling visualized tiles: "
+            + visualization_outputs["visualization_tiles_count"]
         )
 
 
@@ -669,90 +661,20 @@ def _iter_label_rows(tiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def export_visualizations_opencv(
     image_tif: Path,
     output_dir: Path,
-    projected_trees: list[dict[str, float]],
     tiles: list[dict[str, Any]],
-    max_dimension: int = 2400,
     crown_stroke_width: int = 1,
     center_radius: int = 2,
 ) -> dict[str, str]:
-    """Render weak-label visualization overlays using OpenCV."""
-    base_bgr = _load_tif_for_visualization(image_tif=image_tif)
-    original_height, original_width = base_bgr.shape[:2]
-    scale = 1.0
-    if max(original_width, original_height) > max_dimension:
-        scale = float(max_dimension) / float(max(original_width, original_height))
+    """Render weak-label overlays and store one visualization per labeled tile.
 
-    if scale < 1.0:
-        preview = cv2.resize(
-            base_bgr,
-            dsize=(
-                int(round(original_width * scale)),
-                int(round(original_height * scale)),
-            ),
-            interpolation=cv2.INTER_AREA,
-        )
-    else:
-        preview = base_bgr
-
-    crowns = preview.copy()
-    crowns_tiles = preview.copy()
-
-    for tree in projected_trees:
-        x = int(round(tree["x_global"] * scale))
-        y = int(round(tree["y_global"] * scale))
-        radius = max(1, int(round(tree["crown_radius_px"] * scale)))
-        cv2.circle(
-            crowns,
-            center=(x, y),
-            radius=radius,
-            color=(0, 0, 255),
-            thickness=max(1, crown_stroke_width),
-            lineType=cv2.LINE_AA,
-        )
-        cv2.circle(
-            crowns,
-            center=(x, y),
-            radius=max(1, center_radius),
-            color=(0, 255, 255),
-            thickness=-1,
-            lineType=cv2.LINE_AA,
-        )
-        cv2.circle(
-            crowns_tiles,
-            center=(x, y),
-            radius=radius,
-            color=(0, 0, 255),
-            thickness=max(1, crown_stroke_width),
-            lineType=cv2.LINE_AA,
-        )
-        cv2.circle(
-            crowns_tiles,
-            center=(x, y),
-            radius=max(1, center_radius),
-            color=(0, 255, 255),
-            thickness=-1,
-            lineType=cv2.LINE_AA,
-        )
-
-    for tile in tiles:
-        x0 = int(round(float(tile["x0"]) * scale))
-        y0 = int(round(float(tile["y0"]) * scale))
-        x1 = int(round(float(tile["x1"]) * scale))
-        y1 = int(round(float(tile["y1"]) * scale))
-        cv2.rectangle(
-            crowns_tiles,
-            pt1=(x0, y0),
-            pt2=(x1, y1),
-            color=(255, 255, 0),
-            thickness=1,
-            lineType=cv2.LINE_AA,
-        )
-
+    TIFF inputs are streamed tile-by-tile via GDAL windows to avoid full-image
+    reads in memory.
+    """
     viz_dir = output_dir / "visualizations"
+    tiles_dir = viz_dir / "tiles"
     viz_dir.mkdir(parents=True, exist_ok=True)
-    base_path = viz_dir / "base.tif"
-    crowns_path = viz_dir / "labels_crowns.tif"
-    crowns_tiles_path = viz_dir / "labels_crowns_tiles.tif"
+    tiles_dir.mkdir(parents=True, exist_ok=True)
+
     for legacy_png in (
         viz_dir / "base.png",
         viz_dir / "labels_crowns.png",
@@ -760,47 +682,217 @@ def export_visualizations_opencv(
     ):
         if legacy_png.exists():
             legacy_png.unlink()
+    for legacy_tif in (
+        viz_dir / "base.tif",
+        viz_dir / "labels_crowns.tif",
+        viz_dir / "labels_crowns_tiles.tif",
+    ):
+        if legacy_tif.exists():
+            legacy_tif.unlink()
+    for stale_tile in tiles_dir.glob("*.tif"):
+        stale_tile.unlink()
 
-    _write_lossless_tiff(path=base_path, image=preview)
-    _write_lossless_tiff(path=crowns_path, image=crowns)
-    _write_lossless_tiff(path=crowns_tiles_path, image=crowns_tiles)
+    geotiff_dataset = _open_geotiff_dataset_for_streaming(image_tif=image_tif)
+    full_image_bgr: np.ndarray | None = None
+    if geotiff_dataset is None:
+        full_image_bgr = _load_image_for_visualization(image_path=image_tif)
+
+    rendered_tiles = 0
+    try:
+        # OpenCV uses BGR color order.
+        circle_color = (245, 88, 216)  # #d858f5
+        bbox_color = (88, 224, 245)  # #f5e058
+        stroke_thickness = max(1, crown_stroke_width * 2)
+        circle_fill_alpha = 0.3
+        for tile in tiles:
+            tile_bgr = _load_visualization_tile(
+                tile=tile,
+                geotiff_dataset=geotiff_dataset,
+                full_image_bgr=full_image_bgr,
+            )
+            overlay = tile_bgr.copy()
+            tile_height, tile_width = overlay.shape[:2]
+            for tree in tile["trees"]:
+                x = int(round(float(tree["x_pixel"])))
+                y = int(round(float(tree["y_pixel"])))
+                x = max(0, min(tile_width - 1, x))
+                y = max(0, min(tile_height - 1, y))
+                radius = max(1, int(round(float(tree["crown_radius"]))))
+                fill_layer = overlay.copy()
+                cv2.circle(
+                    fill_layer,
+                    center=(x, y),
+                    radius=radius,
+                    color=circle_color,
+                    thickness=-1,
+                    lineType=cv2.LINE_AA,
+                )
+                overlay = cv2.addWeighted(
+                    fill_layer,
+                    circle_fill_alpha,
+                    overlay,
+                    1.0 - circle_fill_alpha,
+                    0.0,
+                )
+                cv2.circle(
+                    overlay,
+                    center=(x, y),
+                    radius=radius,
+                    color=circle_color,
+                    thickness=stroke_thickness,
+                    lineType=cv2.LINE_AA,
+                )
+
+                bbox_x1 = int(round(float(tree["bbox_x1"])))
+                bbox_y1 = int(round(float(tree["bbox_y1"])))
+                bbox_x2 = int(round(float(tree["bbox_x2"])))
+                bbox_y2 = int(round(float(tree["bbox_y2"])))
+                bbox_x1 = max(0, min(tile_width - 1, bbox_x1))
+                bbox_y1 = max(0, min(tile_height - 1, bbox_y1))
+                bbox_x2 = max(0, min(tile_width - 1, bbox_x2))
+                bbox_y2 = max(0, min(tile_height - 1, bbox_y2))
+                if bbox_x2 <= bbox_x1:
+                    bbox_x2 = min(tile_width - 1, bbox_x1 + 1)
+                if bbox_y2 <= bbox_y1:
+                    bbox_y2 = min(tile_height - 1, bbox_y1 + 1)
+                cv2.rectangle(
+                    overlay,
+                    pt1=(bbox_x1, bbox_y1),
+                    pt2=(bbox_x2, bbox_y2),
+                    color=bbox_color,
+                    thickness=stroke_thickness,
+                    lineType=cv2.LINE_AA,
+                )
+
+            tile_id = str(tile["tile_id"])
+            tile_path = tiles_dir / f"{tile_id}.tif"
+            _write_lossless_tiff(path=tile_path, image=overlay)
+            rendered_tiles += 1
+    finally:
+        geotiff_dataset = None
 
     return {
-        "visualization_base": str(base_path),
-        "visualization_crowns": str(crowns_path),
-        "visualization_crowns_tiles": str(crowns_tiles_path),
+        "visualization_tiles_dir": str(tiles_dir),
+        "visualization_tiles_count": str(rendered_tiles),
     }
 
 
-def _load_tif_for_visualization(image_tif: Path) -> np.ndarray:
-    """Load a GeoTIFF into an 8-bit BGR image for OpenCV rendering."""
-    dataset = gdal.Open(str(image_tif), gdal.GA_ReadOnly)
-    if dataset is not None:
-        try:
-            width = dataset.RasterXSize
-            height = dataset.RasterYSize
-            band_count = dataset.RasterCount
-            if band_count <= 0:
-                raise ValueError(f"GeoTIFF has no raster bands: {image_tif}")
+def _open_geotiff_dataset_for_streaming(image_tif: Path) -> gdal.Dataset | None:
+    """Open a TIFF file for tile-window streaming, if possible."""
+    if image_tif.suffix.lower() not in {".tif", ".tiff"}:
+        return None
+    return gdal.Open(str(image_tif), gdal.GA_ReadOnly)
 
-            if band_count >= 3:
-                red = dataset.GetRasterBand(1).ReadAsArray(0, 0, width, height)
-                green = dataset.GetRasterBand(2).ReadAsArray(0, 0, width, height)
-                blue = dataset.GetRasterBand(3).ReadAsArray(0, 0, width, height)
-                rgb = np.dstack([red, green, blue])
-            else:
-                gray = dataset.GetRasterBand(1).ReadAsArray(0, 0, width, height)
-                rgb = np.dstack([gray, gray, gray])
-        finally:
-            dataset = None
 
-        rgb_uint8 = _to_uint8_image(image=rgb)
-        return cv2.cvtColor(rgb_uint8, cv2.COLOR_RGB2BGR)
-
-    image = cv2.imread(str(image_tif), cv2.IMREAD_COLOR)
+def _load_image_for_visualization(image_path: Path) -> np.ndarray:
+    """Load an image into a BGR array for tile extraction."""
+    image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     if image is not None:
         return image
-    raise FileNotFoundError(f"Could not open image for visualization: {image_tif}")
+    raise FileNotFoundError(f"Could not open image for visualization: {image_path}")
+
+
+def _load_visualization_tile(
+    tile: dict[str, Any],
+    geotiff_dataset: gdal.Dataset | None,
+    full_image_bgr: np.ndarray | None,
+) -> np.ndarray:
+    """Load one tile image in BGR either from GDAL streaming or in-memory slice."""
+    x0 = int(tile["x0"])
+    y0 = int(tile["y0"])
+    x1 = int(tile["x1"])
+    y1 = int(tile["y1"])
+    tile_width = x1 - x0
+    tile_height = y1 - y0
+    if tile_width <= 0 or tile_height <= 0:
+        raise ValueError("Tile has non-positive dimensions for visualization.")
+
+    if geotiff_dataset is not None:
+        return _load_geotiff_tile_for_visualization(
+            dataset=geotiff_dataset,
+            x0=x0,
+            y0=y0,
+            tile_width=tile_width,
+            tile_height=tile_height,
+        )
+
+    if full_image_bgr is None:
+        raise ValueError("Missing image source for non-TIFF visualization tile.")
+    tile_bgr = full_image_bgr[y0:y1, x0:x1]
+    if tile_bgr.size == 0:
+        raise ValueError("Failed to extract visualization tile from source image.")
+    return tile_bgr.copy()
+
+
+def _load_geotiff_tile_for_visualization(
+    dataset: gdal.Dataset,
+    x0: int,
+    y0: int,
+    tile_width: int,
+    tile_height: int,
+) -> np.ndarray:
+    """Read one GeoTIFF tile window and convert it to BGR uint8."""
+    band_count = int(dataset.RasterCount)
+    if band_count <= 0:
+        raise ValueError("GeoTIFF has no raster bands.")
+
+    if band_count >= 3:
+        red = _read_geotiff_band_window(
+            dataset=dataset,
+            band_index=1,
+            x0=x0,
+            y0=y0,
+            width=tile_width,
+            height=tile_height,
+        )
+        green = _read_geotiff_band_window(
+            dataset=dataset,
+            band_index=2,
+            x0=x0,
+            y0=y0,
+            width=tile_width,
+            height=tile_height,
+        )
+        blue = _read_geotiff_band_window(
+            dataset=dataset,
+            band_index=3,
+            x0=x0,
+            y0=y0,
+            width=tile_width,
+            height=tile_height,
+        )
+        rgb = np.dstack([red, green, blue])
+    else:
+        gray = _read_geotiff_band_window(
+            dataset=dataset,
+            band_index=1,
+            x0=x0,
+            y0=y0,
+            width=tile_width,
+            height=tile_height,
+        )
+        rgb = np.dstack([gray, gray, gray])
+
+    rgb_uint8 = _to_uint8_image(image=rgb)
+    return cv2.cvtColor(rgb_uint8, cv2.COLOR_RGB2BGR)
+
+
+def _read_geotiff_band_window(
+    dataset: gdal.Dataset,
+    band_index: int,
+    x0: int,
+    y0: int,
+    width: int,
+    height: int,
+) -> np.ndarray:
+    """Read one raster band window from GDAL with error checks."""
+    band = dataset.GetRasterBand(band_index)
+    if band is None:
+        raise ValueError(f"GeoTIFF is missing raster band {band_index}.")
+    window_data = band.ReadAsArray(x0, y0, width, height)
+    if window_data is None:
+        raise ValueError(f"Failed to read GeoTIFF window for band {band_index}.")
+    return window_data
 
 
 def _to_uint8_image(image: np.ndarray) -> np.ndarray:

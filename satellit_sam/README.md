@@ -44,6 +44,7 @@ Command tree:
 
 - `label weak`
 - `label by-bounding-boxes`
+- `predict image-masks`
 
 Global options:
 
@@ -76,6 +77,58 @@ Notes:
 
 - `--weak-labels-csv` can load per-tree tile-local bboxes from `label weak` output (`labels_tiles.csv`).
 
+### `predict image-masks`
+
+Run streamed tile mask prediction on one input image (default `--tile-size 640`, `--tile-overlap 64`):
+
+```bash
+pixi run satellit -- predict image-masks \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --output-path output/predict \
+  --text "tree crowns"
+```
+
+With point and bounding-box prompts in image coordinates (default `sam3`):
+
+```bash
+pixi run satellit -- predict image-masks \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --point 1200,900 \
+  --bbox 1100,800,1500,1200
+```
+
+Use SAM2 explicitly:
+
+```bash
+pixi run satellit -- predict image-masks \
+  --model sam2 \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --point 1200,900
+```
+
+Use DINOv3 explicitly (text filtering only):
+
+```bash
+pixi run satellit -- predict image-masks \
+  --model dinov3 \
+  --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --text "tree"
+```
+
+Note:
+
+- `--model` accepts `sam3` (default), `sam2`, and `dinov3`.
+- `--text` is supported for `sam3` and `dinov3` (not `sam2`).
+- `dinov3` currently supports `--text` only (no `--bbox`, `--point`, or `--weak-labels-csv`).
+- Prediction uses streamed image tiles by default; tune with `--tile-size` and `--tile-overlap`.
+- Cross-tile detections are merged globally with IoU NMS (`--merge-iou-threshold`, default `0.5`).
+- With the current `transformers` SAM3 processor API, point prompts are approximated as small box prompts.
+
+Outputs are written under `--output-path`:
+
+- `image_masks_visualization.png` (mask visualization)
+- `masks/image_masks.npz` (predicted masks, boxes, scores, image_size)
+
 ### `label weak`
 
 Generate weak labels from inventory data:
@@ -106,7 +159,7 @@ Generated outputs include:
 
 Complete CLI docs (all commands/options/arguments) are in:
 
-- `../docs/content/cli/application.md`
+- `../docs/content/cli/index.md`
 
 ## Testing
 
