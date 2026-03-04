@@ -123,15 +123,19 @@ pixi run satellit -- label weak \
 Usage:
 
 ```bash
-pixi run satellit -- label validate-predictions --image-tif <PATH> --predictions-npz <PATH> [OPTIONS]
+pixi run satellit -- label validate-predictions --image-tif <PATH> [OPTIONS]
 ```
 
-Description: Validate SAM3 strong-label masks against inventory stem positions.
+Description: Validate SAM3 strong-label masks against inventory stem positions from
+merged NPZ and/or per-tile NPZ artifacts.
 
 Validation rules:
 
 - Provide exactly one of `--inventory-csv` or `--inventory-shp`.
+- Provide at least one of `--predictions-npz` or `--predictions-tiles-dir`.
 - `--predictions-npz` must contain a `masks` array with shape `(N, H, W)`.
+- `--predictions-tiles-dir` can be partial/incomplete (for interrupted runs) and discovers `tile_x*_y*.npz` directly.
+- If both prediction sources are provided, merged NPZ is preferred.
 - `label_id` is the zero-based SAM3 mask index; once matched, labels are not reused.
 
 Options:
@@ -139,7 +143,8 @@ Options:
 | Option                  | Type                 | Required | Default                                  | Description                                                                  |
 | ----------------------- | -------------------- | -------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
 | `--image-tif`           | file path            | yes      | -                                        | Orthophoto GeoTIFF used for coordinate projection.                           |
-| `--predictions-npz`     | file path            | yes      | -                                        | SAM3 prediction file (for example `masks/image_masks.npz`).                  |
+| `--predictions-npz`     | file path            | no       | `None`                                   | Optional merged SAM3 prediction file (for example `masks/image_masks.npz`).  |
+| `--predictions-tiles-dir` | directory path     | no       | `None`                                   | Optional per-tile prediction NPZ directory (for example `masks/tiles`).      |
 | `--inventory-csv`       | file path            | no       | `None`                                   | Inventory CSV path (semicolon-delimited).                                    |
 | `--inventory-shp`       | file path            | no       | `None`                                   | Inventory ESRI Shapefile (`.shp`) path.                                      |
 | `--output-csv`          | path                 | no       | `output/validation/label_validation.csv` | Validation output CSV path.                                                  |
@@ -163,6 +168,14 @@ Example:
 pixi run satellit -- label validate-predictions \
   --image-tif ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
   --predictions-npz output/predict/masks/image_masks.npz \
+  --inventory-shp ../data/Traunstein/inventory/processed/shifted_new_tree_positions_UTM33N.shp \
+  --output-csv output/validation/label_validation.csv
+```
+
+```bash
+pixi run satellit -- label validate-predictions \
+  --image-tif ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --predictions-tiles-dir output/predict/masks/tiles \
   --inventory-shp ../data/Traunstein/inventory/processed/shifted_new_tree_positions_UTM33N.shp \
   --output-csv output/validation/label_validation.csv
 ```

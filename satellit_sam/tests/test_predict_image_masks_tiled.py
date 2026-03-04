@@ -1,6 +1,7 @@
 """Tests for streamed tiled image-mask prediction workflow."""
 
 import csv
+import json
 from pathlib import Path
 
 import numpy as np
@@ -324,6 +325,20 @@ def test_predict_image_masks_tiled_writes_per_tile_npz_schema(
     assert len(rows) == 1
     assert rows[0]["tile_id"] == "tile_x0_y0"
     assert int(rows[0]["count"]) == 1
+
+    metadata_path = output_path / "metadata.json"
+    assert metadata_path.exists()
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["tile"] == {"size": 32, "overlap": 0}
+    assert metadata["image_path"] == str(image_path.resolve())
+    assert metadata["model"] == "sam3"
+    assert metadata["command"] is None
+    assert metadata["prompt"] == {
+        "text": "tree",
+        "bbox_prompts": [],
+        "point_prompts": [],
+        "weak_label_prompt_count": 0,
+    }
 
 
 @pytest.mark.unit

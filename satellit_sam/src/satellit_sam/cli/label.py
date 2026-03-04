@@ -5,6 +5,7 @@ from typing import Annotated
 
 import typer
 
+from satellit_sam.cli.runtime import current_cli_command
 from satellit_sam.core.allometry import CrownModel, DbhUnit
 from satellit_sam.prompts import load_weak_label_bboxes, parse_bbox_prompts
 from satellit_sam.workflows.label.by_bounding_box import (
@@ -246,6 +247,7 @@ def weak(
         min_crown_radius_m=min_crown_radius_m,
         max_crown_radius_m=max_crown_radius_m,
         bbox_padding_px=bbox_padding_px,
+        command=current_cli_command(),
     )
 
 
@@ -256,16 +258,36 @@ def validate_predictions(
         typer.Option("--image-tif", help="Path to orthophoto GeoTIFF."),
     ],
     predictions_npz: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--predictions-npz",
-            help="Path to SAM3 output NPZ (for example masks/image_masks.npz).",
-            exists=True,
+            help=(
+                "Optional path to merged SAM3 output NPZ "
+                "(for example masks/image_masks.npz). "
+                "If provided together with --predictions-tiles-dir, "
+                "--predictions-npz is preferred."
+            ),
+            exists=False,
             file_okay=True,
             dir_okay=False,
-            readable=True,
+            readable=False,
         ),
-    ],
+    ] = None,
+    predictions_tiles_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--predictions-tiles-dir",
+            help=(
+                "Optional path to per-tile prediction NPZ directory "
+                "(for example output/predict/masks/tiles). "
+                "Useful for partial/interrupted predict runs."
+            ),
+            exists=False,
+            file_okay=False,
+            dir_okay=True,
+            readable=False,
+        ),
+    ] = None,
     inventory_csv: Annotated[
         Path | None,
         typer.Option(
@@ -364,7 +386,8 @@ def validate_predictions(
 
     Args:
         image_tif: Orthophoto GeoTIFF path.
-        predictions_npz: SAM3 output NPZ path.
+        predictions_npz: Optional merged SAM3 output NPZ path.
+        predictions_tiles_dir: Optional per-tile SAM3 NPZ directory path.
         inventory_csv: Optional inventory CSV path.
         inventory_shp: Optional inventory shapefile path.
         output_csv: CSV path for validation rows.
@@ -394,11 +417,30 @@ def validate_predictions(
             "Provide either --inventory-csv or --inventory-shp.",
             param_hint="--inventory-csv / --inventory-shp",
         )
+    if predictions_npz is None and predictions_tiles_dir is None:
+        raise typer.BadParameter(
+            "Provide at least one predictions source: --predictions-npz or --predictions-tiles-dir.",
+            param_hint="--predictions-npz / --predictions-tiles-dir",
+        )
+    if predictions_npz is not None and not predictions_npz.is_file():
+        raise typer.BadParameter(
+            f"Prediction NPZ file does not exist: {predictions_npz}",
+            param_hint="--predictions-npz",
+        )
+    if (
+        predictions_tiles_dir is not None
+        and not predictions_tiles_dir.is_dir()
+    ):
+        raise typer.BadParameter(
+            f"Predictions tiles directory does not exist: {predictions_tiles_dir}",
+            param_hint="--predictions-tiles-dir",
+        )
 
     try:
         validate_sam3_predictions(
             image_tif=image_tif,
             predictions_npz=predictions_npz,
+            predictions_tiles_dir=predictions_tiles_dir,
             output_csv=output_csv,
             inventory_csv=inventory_csv,
             inventory_shp=inventory_shp,
@@ -419,7 +461,7 @@ def validate_predictions(
         raise typer.BadParameter(
             str(err),
             param_hint=(
-                "--predictions-npz / --inventory-csv / --inventory-shp "
+                "--predictions-npz / --predictions-tiles-dir / --inventory-csv / --inventory-shp "
                 "/ --image-tif / --dbh-field / --dbh-unit / --min-dbh-cm / --max-dbh-cm"
             ),
         ) from err

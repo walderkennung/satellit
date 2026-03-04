@@ -26,9 +26,35 @@ class _CandidateMatch:
     mask_area: int
 
 
+@dataclass
+class _TileLabel:
+    """One label extracted from one per-tile prediction NPZ."""
+
+    label_id: int
+    score: float
+    mask_area: int
+    tile_origin: tuple[int, int]
+    tile_size: tuple[int, int]
+    tile_mask: np.ndarray
+
+
+@dataclass
+class _LoadedPredictions:
+    """Unified representation for merged and tile-based prediction inputs."""
+
+    source_mode: str
+    merged_masks: np.ndarray | None
+    merged_scores: np.ndarray | None
+    merged_mask_areas: np.ndarray | None
+    tile_labels_by_tile: dict[tuple[int, int], list[_TileLabel]] | None
+    tile_extents: list[tuple[int, int, int, int]] | None
+    total_labels: int
+
+
 def validate_sam3_predictions(
     image_tif: Path,
-    predictions_npz: Path,
+    predictions_npz: Path | None = None,
+    predictions_tiles_dir: Path | None = None,
     output_csv: Path = Path("output/validation/label_validation.csv"),
     inventory_csv: Path | None = None,
     inventory_shp: Path | None = None,
@@ -49,7 +75,8 @@ def validate_sam3_predictions(
 
     Args:
         image_tif: GeoTIFF used to map inventory trees into image pixel space.
-        predictions_npz: Path to SAM3 ``image_masks.npz`` prediction artifact.
+        predictions_npz: Optional path to SAM3 ``image_masks.npz`` artifact.
+        predictions_tiles_dir: Optional path to per-tile mask NPZ directory.
         output_csv: Output CSV path for validation rows.
         inventory_csv: Optional inventory CSV path.
         inventory_shp: Optional inventory SHP path.
@@ -68,7 +95,7 @@ def validate_sam3_predictions(
 
     Returns:
         DataFrame with columns
-        ``tree_id, stem_id, label_id, tree_pos_x, tree_pos_y``.
+        ``tree_id, stem_id, label_id, tree_pos_x, tree_pos_y, prediction_coverage``.
 
     Raises:
         ValueError: If inputs are invalid or prediction payload is malformed.
@@ -99,14 +126,12 @@ def validate_sam3_predictions(
         deduplicate_tree_id=deduplicate_tree_id,
     )
 
-    masks, scores, mask_areas = _load_predictions(predictions_npz=predictions_npz)
-    mask_count, mask_height, mask_width = masks.shape
-
-    if mask_width != meta.width or mask_height != meta.height:
-        raise ValueError(
-            "Prediction mask shape does not match image dimensions: "
-            f"masks=({mask_width},{mask_height}) image=({meta.width},{meta.height})."
-        )
+    loaded_predictions = _select_prediction_source(
+        image_width=meta.width,
+        image_height=meta.height,
+        predictions_npz=predictions_npz,
+        predictions_tiles_dir=predictions_tiles_dir,
+    )
 
     wgs84_to_image = _build_wgs84_to_image_crs_transform(meta=meta)
     utm_fallback = _infer_utm_fallback_from_image_name(image_tif=image_tif)
@@ -121,18 +146,14 @@ def validate_sam3_predictions(
     candidates: list[_CandidateMatch] = []
 
     for tree_index, tree in enumerate(inventory.trees):
-        rows.append(
-            {
-                "tree_id": tree.tree_id,
-                "stem_id": _stem_id_for_tree(tree=tree),
-                "label_id": None,
-                "tree_pos_x": tree.x_wgs84,
-                "tree_pos_y": tree.y_wgs84,
-            }
-        )
-
-        if mask_count == 0:
-            continue
+        row = {
+            "tree_id": tree.tree_id,
+            "stem_id": _stem_id_for_tree(tree=tree),
+            "label_id": None,
+            "tree_pos_x": tree.x_wgs84,
+            "tree_pos_y": tree.y_wgs84,
+            "prediction_coverage": False,
+        }
 
         pixel_x, pixel_y = _wgs84_tree_to_pixel(
             lon=tree.x_wgs84,
@@ -144,20 +165,75 @@ def validate_sam3_predictions(
 
         stem_x = int(round(pixel_x))
         stem_y = int(round(pixel_y))
-        if stem_x < 0 or stem_y < 0 or stem_x >= mask_width or stem_y >= mask_height:
+
+        if loaded_predictions.source_mode == "merged_npz":
+            if stem_x < 0 or stem_y < 0 or stem_x >= meta.width or stem_y >= meta.height:
+                rows.append(row)
+                continue
+
+            row["prediction_coverage"] = True
+            masks = loaded_predictions.merged_masks
+            scores = loaded_predictions.merged_scores
+            mask_areas = loaded_predictions.merged_mask_areas
+            assert masks is not None
+            assert scores is not None
+            assert mask_areas is not None
+
+            label_ids = np.where(masks[:, stem_y, stem_x])[0]
+            for label_id in label_ids.tolist():
+                candidates.append(
+                    _CandidateMatch(
+                        tree_index=tree_index,
+                        label_id=int(label_id),
+                        score=float(scores[label_id]),
+                        mask_area=int(mask_areas[label_id]),
+                    )
+                )
+            rows.append(row)
             continue
 
-        label_ids = np.where(masks[:, stem_y, stem_x])[0]
-        for label_id in label_ids.tolist():
-            candidates.append(
-                _CandidateMatch(
-                    tree_index=tree_index,
-                    label_id=int(label_id),
-                    score=float(scores[label_id]),
-                    mask_area=int(mask_areas[label_id]),
-                )
-            )
+        if stem_x < 0 or stem_y < 0 or stem_x >= meta.width or stem_y >= meta.height:
+            rows.append(row)
+            continue
 
+        tile_extents = loaded_predictions.tile_extents or []
+        if not _point_in_any_extent(stem_x=stem_x, stem_y=stem_y, extents=tile_extents):
+            rows.append(row)
+            continue
+
+        row["prediction_coverage"] = True
+        tile_labels_by_tile = loaded_predictions.tile_labels_by_tile or {}
+        for tile_origin, tile_labels in tile_labels_by_tile.items():
+            tile_x0, tile_y0 = tile_origin
+            if not tile_labels:
+                continue
+
+            tile_width, tile_height = tile_labels[0].tile_size
+            tile_x1 = tile_x0 + tile_width
+            tile_y1 = tile_y0 + tile_height
+            if stem_x < tile_x0 or stem_y < tile_y0 or stem_x >= tile_x1 or stem_y >= tile_y1:
+                continue
+
+            local_x = stem_x - tile_x0
+            local_y = stem_y - tile_y0
+            for label in tile_labels:
+                if local_x >= label.tile_mask.shape[1] or local_y >= label.tile_mask.shape[0]:
+                    continue
+                if not bool(label.tile_mask[local_y, local_x]):
+                    continue
+                candidates.append(
+                    _CandidateMatch(
+                        tree_index=tree_index,
+                        label_id=label.label_id,
+                        score=label.score,
+                        mask_area=label.mask_area,
+                    )
+                )
+
+        rows.append(row)
+
+    used_labels: set[int] = set()
+    assigned_trees: set[int] = set()
     if candidates:
         candidates.sort(
             key=lambda candidate: (
@@ -168,8 +244,6 @@ def validate_sam3_predictions(
             )
         )
 
-        used_labels: set[int] = set()
-        assigned_trees: set[int] = set()
         for candidate in candidates:
             if candidate.tree_index in assigned_trees:
                 continue
@@ -181,45 +255,86 @@ def validate_sam3_predictions(
 
     result = pd.DataFrame(
         rows,
-        columns=["tree_id", "stem_id", "label_id", "tree_pos_x", "tree_pos_y"],
+        columns=[
+            "tree_id",
+            "stem_id",
+            "label_id",
+            "tree_pos_x",
+            "tree_pos_y",
+            "prediction_coverage",
+        ],
     )
     result["label_id"] = pd.Series(
         [row["label_id"] for row in rows],
         dtype="object",
+    )
+    result["prediction_coverage"] = pd.Series(
+        [bool(row["prediction_coverage"]) for row in rows],
+        dtype=bool,
     )
 
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(output_csv, index=False)
 
     total = len(result)
-    matched = int(result["label_id"].notna().sum())
+    covered = int(result["prediction_coverage"].sum())
+    uncovered = total - covered
+    matched = int(len(used_labels))
     unmatched = total - matched
+    unmatched_mask_labels = max(0, int(loaded_predictions.total_labels - matched))
     match_rate = 0.0 if total == 0 else (matched / total) * 100.0
+    true_positives = matched
+    false_positives = unmatched_mask_labels
+    false_negatives = unmatched
 
     print(f"Validation results saved to: {output_csv}")
     print("Validation summary:")
+    print(f"- source mode: {loaded_predictions.source_mode}")
     print(f"- total trees: {total}")
+    print(f"- covered trees: {covered}")
+    print(f"- uncovered trees: {uncovered}")
     print(f"- matched trees: {matched}")
     print(f"- unmatched trees: {unmatched}")
+    print(f"- unmatched mask labels: {unmatched_mask_labels}")
     print(f"- match rate: {match_rate:.2f}%")
+    print("Confusion matrix:")
+    print(f"- true positives: {true_positives}")
+    print(f"- false positives: {false_positives}")
+    print(f"- false negatives: {false_negatives}")
 
     return result
 
 
-def _load_predictions(
+def _select_prediction_source(
+    image_width: int,
+    image_height: int,
+    predictions_npz: Path | None,
+    predictions_tiles_dir: Path | None,
+) -> _LoadedPredictions:
+    """Load prediction artifacts with source-priority semantics."""
+    if predictions_npz is not None:
+        return _load_predictions_from_merged_npz(
+            image_width=image_width,
+            image_height=image_height,
+            predictions_npz=predictions_npz,
+        )
+    if predictions_tiles_dir is not None:
+        return _load_predictions_from_tiles_dir(
+            image_width=image_width,
+            image_height=image_height,
+            predictions_tiles_dir=predictions_tiles_dir,
+        )
+    raise ValueError(
+        "Provide at least one predictions source: `predictions_npz` or `predictions_tiles_dir`."
+    )
+
+
+def _load_predictions_from_merged_npz(
+    image_width: int,
+    image_height: int,
     predictions_npz: Path,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Load masks and scores from SAM3 NPZ predictions.
-
-    Args:
-        predictions_npz: Path to ``image_masks.npz``.
-
-    Returns:
-        Tuple ``(masks, scores, mask_areas)``.
-
-    Raises:
-        ValueError: If required NPZ arrays are missing or malformed.
-    """
+) -> _LoadedPredictions:
+    """Load merged ``image_masks.npz`` predictions."""
     with np.load(predictions_npz, allow_pickle=False) as predictions:
         if "masks" not in predictions:
             raise ValueError("Predictions NPZ is missing required 'masks' array.")
@@ -242,8 +357,151 @@ def _load_predictions(
             f"scores={scores.shape[0]} masks={label_count}."
         )
 
+    mask_height = int(masks.shape[1]) if masks.ndim == 3 else 0
+    mask_width = int(masks.shape[2]) if masks.ndim == 3 else 0
+    if mask_width != image_width or mask_height != image_height:
+        raise ValueError(
+            "Prediction mask shape does not match image dimensions: "
+            f"masks=({mask_width},{mask_height}) image=({image_width},{image_height})."
+        )
+
     mask_areas = masks.reshape(label_count, -1).sum(axis=1).astype(np.int64)
-    return masks, scores, mask_areas
+    return _LoadedPredictions(
+        source_mode="merged_npz",
+        merged_masks=masks,
+        merged_scores=scores,
+        merged_mask_areas=mask_areas,
+        tile_labels_by_tile=None,
+        tile_extents=None,
+        total_labels=label_count,
+    )
+
+
+def _load_predictions_from_tiles_dir(
+    image_width: int,
+    image_height: int,
+    predictions_tiles_dir: Path,
+) -> _LoadedPredictions:
+    """Load per-tile predictions from ``masks/tiles`` directory."""
+    tile_paths = sorted(predictions_tiles_dir.glob("tile_x*_y*.npz"))
+    if not tile_paths:
+        raise ValueError(
+            "No per-tile prediction NPZ files found in predictions_tiles_dir. "
+            "Expected files like tile_x0_y0.npz."
+        )
+
+    parsed_tiles: list[
+        tuple[
+            str,
+            tuple[int, int],
+            tuple[int, int],
+            np.ndarray,
+            np.ndarray,
+            np.ndarray,
+        ]
+    ] = []
+
+    for tile_path in tile_paths:
+        with np.load(tile_path, allow_pickle=False) as tile_npz:
+            missing = [
+                key
+                for key in ("tile_origin", "tile_size", "masks", "boxes", "scores")
+                if key not in tile_npz
+            ]
+            if missing:
+                raise ValueError(
+                    f"Tile NPZ {tile_path} is missing required fields: {', '.join(missing)}."
+                )
+
+            tile_origin_values = np.asarray(tile_npz["tile_origin"], dtype=np.int32).reshape(-1)
+            tile_size_values = np.asarray(tile_npz["tile_size"], dtype=np.int32).reshape(-1)
+            if tile_origin_values.shape[0] != 2 or tile_size_values.shape[0] != 2:
+                raise ValueError(
+                    f"Tile NPZ {tile_path} has invalid tile_origin/tile_size shapes."
+                )
+            tile_origin = (int(tile_origin_values[0]), int(tile_origin_values[1]))
+            tile_size = (int(tile_size_values[0]), int(tile_size_values[1]))
+
+            masks = np.asarray(tile_npz["masks"], dtype=bool)
+            boxes = np.asarray(tile_npz["boxes"], dtype=np.float32)
+            scores = np.asarray(tile_npz["scores"], dtype=np.float32).reshape(-1)
+
+        if masks.ndim != 3:
+            raise ValueError(
+                f"Tile NPZ {tile_path} has invalid 'masks' shape; expected (N,H,W)."
+            )
+
+        expected_h = max(0, min(tile_size[1], image_height - tile_origin[1]))
+        expected_w = max(0, min(tile_size[0], image_width - tile_origin[0]))
+        if masks.shape[1] != expected_h or masks.shape[2] != expected_w:
+            raise ValueError(
+                f"Tile NPZ {tile_path} mask shape does not match tile extent."
+            )
+
+        count = int(masks.shape[0])
+        if boxes.ndim != 2 or boxes.shape[1] != 4 or boxes.shape[0] != count:
+            raise ValueError(
+                f"Tile NPZ {tile_path} has invalid 'boxes' shape; expected (N,4)."
+            )
+        if scores.shape[0] != count:
+            raise ValueError(
+                f"Tile NPZ {tile_path} has invalid 'scores' length; expected {count}."
+            )
+
+        parsed_tiles.append((tile_path.stem, tile_origin, tile_size, masks, boxes, scores))
+
+    parsed_tiles.sort(key=lambda item: (item[1][1], item[1][0], item[0]))
+
+    tile_labels_by_tile: dict[tuple[int, int], list[_TileLabel]] = {}
+    tile_extents: list[tuple[int, int, int, int]] = []
+    next_label_id = 0
+
+    for _, tile_origin, tile_size, masks, _, scores in parsed_tiles:
+        tile_x0, tile_y0 = tile_origin
+        tile_width, tile_height = tile_size
+        tile_x1 = min(image_width, tile_x0 + tile_width)
+        tile_y1 = min(image_height, tile_y0 + tile_height)
+        if tile_x1 <= tile_x0 or tile_y1 <= tile_y0:
+            continue
+
+        tile_extents.append((tile_x0, tile_y0, tile_x1, tile_y1))
+        labels: list[_TileLabel] = []
+        for local_index in range(int(masks.shape[0])):
+            tile_mask = np.asarray(masks[local_index], dtype=bool)
+            labels.append(
+                _TileLabel(
+                    label_id=next_label_id,
+                    score=float(scores[local_index]),
+                    mask_area=int(tile_mask.sum()),
+                    tile_origin=tile_origin,
+                    tile_size=(tile_x1 - tile_x0, tile_y1 - tile_y0),
+                    tile_mask=tile_mask,
+                )
+            )
+            next_label_id += 1
+        tile_labels_by_tile[tile_origin] = labels
+
+    return _LoadedPredictions(
+        source_mode="tile_npz_dir",
+        merged_masks=None,
+        merged_scores=None,
+        merged_mask_areas=None,
+        tile_labels_by_tile=tile_labels_by_tile,
+        tile_extents=tile_extents,
+        total_labels=next_label_id,
+    )
+
+
+def _point_in_any_extent(
+    stem_x: int,
+    stem_y: int,
+    extents: list[tuple[int, int, int, int]],
+) -> bool:
+    """Return whether ``(x,y)`` is within any covered tile extent."""
+    for x0, y0, x1, y1 in extents:
+        if stem_x >= x0 and stem_x < x1 and stem_y >= y0 and stem_y < y1:
+            return True
+    return False
 
 
 def _load_inventory(

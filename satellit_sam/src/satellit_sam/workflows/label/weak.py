@@ -26,6 +26,7 @@ from satellit_sam.core.allometry import (
 from satellit_sam.core.geotiff import GeoTiffMeta
 from satellit_sam.core.inventory import Inventory
 from satellit_sam.core.tree import Tree
+from satellit_sam.workflows.run_metadata import write_run_metadata
 
 
 def make_weak_labels(
@@ -56,6 +57,7 @@ def make_weak_labels(
     min_crown_radius_m: float = 0.5,
     max_crown_radius_m: float = 15.0,
     bbox_padding_px: float = 4.0,
+    command: str | None = None,
 ) -> None:
     """Generate tile-wise weak labels and write them to ``labels_tiles.csv``.
 
@@ -232,8 +234,18 @@ def make_weak_labels(
             output_dir=output_dir,
             tiles=visualization_tiles,
         )
+    metadata_path = write_run_metadata(
+        output_dir=output_dir,
+        image_path=image_tif,
+        tile_size=tile_size,
+        tile_overlap=tile_overlap,
+        prompt=None,
+        model=str(crown_model),
+        command=command,
+    )
     print(f"Weak labels written: {csv_path}")
     print(f"Weak labels written: {shp_path}")
+    print(f"Run metadata written: {metadata_path}")
     if visualization_outputs:
         print(
             "Weak labeling visualizations (per tile): "

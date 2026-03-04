@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 
 import typer
 
+from satellit_sam.cli.runtime import current_cli_command
 from satellit_sam.prompts import (
     load_weak_label_bboxes,
     parse_bbox_prompts,
@@ -215,6 +216,7 @@ def image_masks(
             tile_overlap=tile_overlap,
             merge_iou_threshold=merge_iou_threshold,
             weak_label_bboxes_by_tile=weak_label_bboxes_by_tile,
+            command=current_cli_command(),
         )
     except ValueError as err:
         raise typer.BadParameter(

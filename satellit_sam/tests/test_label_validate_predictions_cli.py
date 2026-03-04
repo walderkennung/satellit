@@ -58,6 +58,7 @@ def test_label_validate_predictions_cli_passes_arguments(temp_dir, monkeypatch):
     assert captured["stem_id_field"] == "StemTag"
     assert captured["min_dbh_cm"] == 10.0
     assert captured["max_dbh_cm"] == 30.0
+    assert captured["predictions_tiles_dir"] is None
 
 
 @pytest.mark.unit
@@ -109,6 +110,32 @@ def test_label_validate_predictions_cli_rejects_invalid_inventory_source_combo(t
 
 
 @pytest.mark.unit
+def test_label_validate_predictions_cli_rejects_missing_predictions_source(temp_dir):
+    """CLI should require at least one predictions source."""
+    image_path = temp_dir / "source.tif"
+    inventory_path = temp_dir / "inventory.shp"
+
+    image_path.write_bytes(b"x")
+    inventory_path.write_bytes(b"x")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "label",
+            "validate-predictions",
+            "--image-tif",
+            str(image_path),
+            "--inventory-shp",
+            str(inventory_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "least one predictions source" in result.output
+
+
+@pytest.mark.unit
 def test_label_validate_predictions_cli_rejects_invalid_npz_payload(
     temp_dir,
     monkeypatch,
@@ -148,3 +175,85 @@ def test_label_validate_predictions_cli_rejects_invalid_npz_payload(
 
     assert result.exit_code != 0
     assert "missing required 'masks'" in result.output
+
+
+@pytest.mark.unit
+def test_label_validate_predictions_cli_passes_tiles_dir(temp_dir, monkeypatch):
+    """CLI should pass per-tile prediction directory to workflow."""
+    image_path = temp_dir / "source.tif"
+    inventory_path = temp_dir / "inventory.shp"
+    tiles_dir = temp_dir / "tiles"
+    tiles_dir.mkdir(parents=True, exist_ok=True)
+    (tiles_dir / "tile_x0_y0.npz").write_bytes(b"not-read-by-mock")
+
+    image_path.write_bytes(b"x")
+    inventory_path.write_bytes(b"x")
+
+    captured: dict[str, object] = {}
+
+    def _fake_validate(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(label_cli, "validate_sam3_predictions", _fake_validate)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "label",
+            "validate-predictions",
+            "--image-tif",
+            str(image_path),
+            "--predictions-tiles-dir",
+            str(tiles_dir),
+            "--inventory-shp",
+            str(inventory_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["predictions_npz"] is None
+    assert captured["predictions_tiles_dir"] == tiles_dir
+
+
+@pytest.mark.unit
+def test_label_validate_predictions_cli_accepts_both_prediction_sources(
+    temp_dir,
+    monkeypatch,
+):
+    """CLI should pass both sources; workflow decides source priority."""
+    image_path = temp_dir / "source.tif"
+    predictions_path = temp_dir / "image_masks.npz"
+    inventory_path = temp_dir / "inventory.shp"
+    tiles_dir = temp_dir / "tiles"
+    tiles_dir.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(predictions_path, masks=np.zeros((0, 2, 2), dtype=bool))
+    (tiles_dir / "tile_x0_y0.npz").write_bytes(b"not-read-by-mock")
+    image_path.write_bytes(b"x")
+    inventory_path.write_bytes(b"x")
+
+    captured: dict[str, object] = {}
+
+    def _fake_validate(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(label_cli, "validate_sam3_predictions", _fake_validate)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "label",
+            "validate-predictions",
+            "--image-tif",
+            str(image_path),
+            "--predictions-npz",
+            str(predictions_path),
+            "--predictions-tiles-dir",
+            str(tiles_dir),
+            "--inventory-shp",
+            str(inventory_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["predictions_npz"] == predictions_path
+    assert captured["predictions_tiles_dir"] == tiles_dir

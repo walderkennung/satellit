@@ -19,6 +19,7 @@ from satellit_sam.prompts import (
     project_points_to_tile,
     tile_id_from_origin,
 )
+from satellit_sam.workflows.run_metadata import write_run_metadata
 
 gdal.UseExceptions()
 
@@ -69,6 +70,7 @@ def predict_image_masks(
     weak_label_bboxes_by_tile: (
         dict[str, list[tuple[float, float, float, float]]] | None
     ) = None,
+    command: str | None = None,
 ) -> None:
     """Predict image masks from one image and save outputs.
 
@@ -91,6 +93,7 @@ def predict_image_masks(
         tile_overlap: Overlap between neighboring prediction tiles in pixels.
         merge_iou_threshold: IoU threshold for cross-tile NMS merge.
         weak_label_bboxes_by_tile: Optional tile-local bboxes keyed by tile id.
+        command: Optional CLI command string used to start the run.
 
     Raises:
         ValueError: If inputs or prompt combinations are invalid.
@@ -171,6 +174,13 @@ def predict_image_masks(
             image_points=point_prompts,
             tile_origin=tile_origin,
             tile_size=tile_image.size,
+        )
+        print(
+            "Processing tile "
+            f"{tile_id}: "
+            f"position=({tile_origin[0]}, {tile_origin[1]}), "
+            f"size=({tile_width}, {tile_height}), "
+            f"bboxes={_format_tile_bboxes(tile_bbox_prompts)}"
         )
 
         if text_prompt is None and not tile_bbox_prompts and not tile_point_prompts:
@@ -275,12 +285,32 @@ def predict_image_masks(
         source_tile_x=source_tile_x,
         source_tile_y=source_tile_y,
     )
+    metadata_path = write_run_metadata(
+        output_dir=output_path,
+        image_path=image_path,
+        tile_size=tile_size,
+        tile_overlap=tile_overlap,
+        prompt={
+            "text": text_prompt,
+            "bbox_prompts": [list(prompt) for prompt in bbox_prompts],
+            "point_prompts": [list(prompt) for prompt in point_prompts],
+            "weak_label_prompt_count": (
+                sum(len(prompts) for prompts in weak_label_bboxes_by_tile.values())
+                if weak_label_bboxes_by_tile
+                else 0
+            ),
+        },
+        model=model,
+        command=command,
+    )
 
+    print(f"Finished tile processing. Total masks found: {len(detections)}")
     print("✓ Mask prediction complete.")
     _print_prediction_summary(detections=detections)
     print(f"Visualization saved to: {visualization_path}")
     print(f"Predicted masks saved to: {masks_path}")
     print(f"Per-tile masks saved under: {mask_tiles_dir}")
+    print(f"Run metadata saved to: {metadata_path}")
 
 
 def _iter_in_memory_tile_inputs(
@@ -669,6 +699,24 @@ def _save_tile_masks_npz(
         boxes=np.asarray(boxes, dtype=np.float32),
         scores=np.asarray(scores, dtype=np.float32),
     )
+
+
+def _format_tile_bboxes(
+    tile_bboxes: list[tuple[float, float, float, float]],
+) -> str:
+    """Format tile-local bbox prompts as ``position`` and ``size`` tuples."""
+    if not tile_bboxes:
+        return "none"
+
+    formatted_bboxes: list[str] = []
+    for idx, bbox in enumerate(tile_bboxes, start=1):
+        x1, y1, x2, y2 = [float(value) for value in bbox]
+        width = max(0.0, x2 - x1)
+        height = max(0.0, y2 - y1)
+        formatted_bboxes.append(
+            f"{idx}: pos=({x1:.1f}, {y1:.1f}), size=({width:.1f}, {height:.1f})"
+        )
+    return "[" + "; ".join(formatted_bboxes) + "]"
 
 
 def _write_tile_index(

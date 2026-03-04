@@ -164,7 +164,9 @@ Generated outputs include:
 
 ### `label validate-predictions`
 
-Validate SAM3 strong labels (`image_masks.npz`) against inventory stem positions:
+Validate SAM3 strong labels against inventory stem positions.
+
+Merged prediction artifact (`image_masks.npz`) input:
 
 ```bash
 pixi run satellit -- label validate-predictions \
@@ -174,12 +176,25 @@ pixi run satellit -- label validate-predictions \
   --output-csv output/validation/label_validation.csv
 ```
 
+Per-tile artifact directory input (supports interrupted runs):
+
+```bash
+pixi run satellit -- label validate-predictions \
+  --image-tif ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --predictions-tiles-dir output/predict/masks/tiles \
+  --inventory-shp ../data/Traunstein/inventory/processed/shifted_new_tree_positions_UTM33N.shp \
+  --output-csv output/validation/label_validation.csv
+```
+
 Notes:
 
 - Matching uses SAM3 instance masks (strong labels), not weak-label boxes.
+- Provide at least one of `--predictions-npz` or `--predictions-tiles-dir`.
+- If both are provided, validation prefers `--predictions-npz`.
+- Per-tile validation discovers `tile_x*_y*.npz` files directly; `index.csv` is optional.
 - DBH filtering options (`--dbh-field`, `--dbh-unit`, `--min-dbh-cm`, `--max-dbh-cm`) match weak-label semantics.
 - `--stem-id-field` fallback chain is: explicit field -> `stemtag` -> `tree_id`.
-- Output columns are `tree_id,stem_id,label_id,tree_pos_x,tree_pos_y` and `label_id` is empty when unmatched.
+- Output columns are `tree_id,stem_id,label_id,tree_pos_x,tree_pos_y,prediction_coverage` and `label_id` is empty when unmatched.
 
 ## Full Command Reference
 
