@@ -67,8 +67,12 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 - `pixi run docstring-coverage` (print docstring coverage counts plus Google-style compliance for modules, classes, and functions)
 - For CUDA on Linux: `pixi install -e cuda` and `pixi run -e cuda predict-masks`.
 - `satellit -- label weak` writes per-tree weak-label crown bounding boxes (`bbox_x1,bbox_y1,bbox_x2,bbox_y2`) into `labels_tiles.csv` and `labels_tiles.shp`.
-- `satellit -- label by-bounding-boxes --weak-labels-csv <labels_tiles.csv>` consumes those stored tile-local bboxes as SAM box prompts.
-- `satellit -- predict image-masks --image <image>` runs streamed-tile segmentation mask prediction from supported prompts and writes `image_masks_visualization.png` plus raw masks at `masks/image_masks.npz`.
+- `satellit -- label by-bounding-boxes ...` is deprecated (visualization-oriented). Use `predict image-masks` for canonical strong-label artifacts.
+- `satellit -- predict image-masks --image <image>` is the canonical strong-label workflow and writes:
+  - merged strong labels at `masks/image_masks.npz` (`masks,boxes,scores,image_size,source_tile_x,source_tile_y`)
+  - per-tile strong labels at `masks/tiles/tile_x{X}_y{Y}.npz` (`tile_id,tile_origin,tile_size,masks,boxes,scores`)
+  - tile manifest at `masks/tiles/index.csv` (`tile_id,x0,y0,width,height,count`)
+- `satellit -- label validate-predictions --image-tif <image.tif> --predictions-npz <masks/image_masks.npz> --inventory-{csv|shp} <inventory>` validates SAM3 strong labels against filtered inventory stems and writes `output/validation/label_validation.csv` by default with columns `tree_id,stem_id,label_id,tree_pos_x,tree_pos_y`.
 - `satellit -- predict image-masks --model <sam3|sam2|dinov3>` selects the segmentation backend; default is `sam3` when omitted. `--text` is supported with `sam3` and `dinov3`, but not `sam2`. `dinov3` currently supports text prompts only. For current SAM3 processor support, point prompts are approximated as small box prompts.
 - `satellit -- predict image-masks --tile-size <int> --tile-overlap <int> --merge-iou-threshold <float>` controls streamed prediction tiles and global cross-tile NMS merge.
 - Documentation site tasks (run from `docs/`):

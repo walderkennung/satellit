@@ -43,7 +43,8 @@ pixi run satellit -- --help
 Command tree:
 
 - `label weak`
-- `label by-bounding-boxes`
+- `label validate-predictions`
+- `label by-bounding-boxes` (deprecated)
 - `predict image-masks`
 
 Global options:
@@ -53,6 +54,9 @@ Global options:
 - `--help`
 
 ### `label by-bounding-boxes`
+
+Deprecated: use `predict image-masks` as the canonical strong-label workflow.
+This command remains available temporarily for migration and visualization-only runs.
 
 Run label generation from bounding-box prompts:
 
@@ -76,6 +80,7 @@ pixi run satellit -- label by-bounding-boxes \
 Notes:
 
 - `--weak-labels-csv` can load per-tree tile-local bboxes from `label weak` output (`labels_tiles.csv`).
+- This workflow does **not** persist canonical strong-label mask artifacts; use `predict image-masks`.
 
 ### `predict image-masks`
 
@@ -127,7 +132,9 @@ Note:
 Outputs are written under `--output-path`:
 
 - `image_masks_visualization.png` (mask visualization)
-- `masks/image_masks.npz` (predicted masks, boxes, scores, image_size)
+- `masks/image_masks.npz` (merged masks, boxes, scores, image_size, source_tile_x, source_tile_y)
+- `masks/tiles/index.csv` (tile manifest: `tile_id,x0,y0,width,height,count`)
+- `masks/tiles/tile_x{X}_y{Y}.npz` (per-tile strong labels with `tile_id,tile_origin,tile_size,masks,boxes,scores`)
 
 ### `label weak`
 
@@ -155,6 +162,25 @@ Generated outputs include:
 - `labels_tiles.shp` (WGS84 points with bbox attributes)
 - optional visualization TIFFs under `visualizations/`
 
+### `label validate-predictions`
+
+Validate SAM3 strong labels (`image_masks.npz`) against inventory stem positions:
+
+```bash
+pixi run satellit -- label validate-predictions \
+  --image-tif ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --predictions-npz output/predict/masks/image_masks.npz \
+  --inventory-shp ../data/Traunstein/inventory/processed/shifted_new_tree_positions_UTM33N.shp \
+  --output-csv output/validation/label_validation.csv
+```
+
+Notes:
+
+- Matching uses SAM3 instance masks (strong labels), not weak-label boxes.
+- DBH filtering options (`--dbh-field`, `--dbh-unit`, `--min-dbh-cm`, `--max-dbh-cm`) match weak-label semantics.
+- `--stem-id-field` fallback chain is: explicit field -> `stemtag` -> `tree_id`.
+- Output columns are `tree_id,stem_id,label_id,tree_pos_x,tree_pos_y` and `label_id` is empty when unmatched.
+
 ## Full Command Reference
 
 Complete CLI docs (all commands/options/arguments) are in:
@@ -179,5 +205,5 @@ pixi run test
 Run in CUDA environment:
 
 ```bash
-pixi run -e cuda satellit -- label by-bounding-boxes --help
+pixi run -e cuda satellit -- predict image-masks --help
 ```

@@ -38,6 +38,12 @@ def make_labels_by_bounding_box(
     """
     from satellit_sam.sam3 import sam
 
+    print(
+        "DEPRECATED workflow: `label by-bounding-boxes` is deprecated. "
+        "Use `predict image-masks --bbox ...` or "
+        "`predict image-masks --weak-labels-csv ...` for canonical strong-label outputs."
+    )
+
     output_path.mkdir(parents=True, exist_ok=True)
 
     sam.print_debug_info()

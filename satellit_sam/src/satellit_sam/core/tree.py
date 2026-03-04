@@ -11,6 +11,7 @@ class Tree:
 
     Attributes:
         tree_id: Inventory identifier for the tree.
+        stem_id: Inventory stem identifier when available.
         species: Species label when available.
         status: Tree status from the source inventory (for example, alive/dead).
         x_wgs84: Longitude in decimal degrees (EPSG:4326).
@@ -24,6 +25,7 @@ class Tree:
     x_wgs84: float
     y_wgs84: float
     dbh_cm: float
+    stem_id: str | None = None
 
     def pos_to_utm(
         self, utm_zone: int, northern_hemisphere: bool
