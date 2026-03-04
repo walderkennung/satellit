@@ -60,17 +60,19 @@ IF THE WORKFLOW OR CONVENTIONS ARE CHANGED OR ADDED: UPDATE THIS DOCUMENT!
 
 - `satellit_sam` has its own Pixi configuration and should be treated as the home for SAM-specific code and workflows.
 - `satellit_sam` Pixi tasks (run from `satellit_sam/`):
+- `pixi install` (install/sync `satellit_sam` dependencies)
 - `pixi run satellit` (run main satellit CLI)
 - `pixi run sam-download` (download SAM checkpoints)
 - `pixi run sam-test` (validate SAM setup)
 - `pixi run test` (run test suite with coverage)
 - `pixi run docstring-coverage` (print docstring coverage counts plus Google-style compliance for modules, classes, and functions)
-- For CUDA on Linux: `pixi install -e cuda` and `pixi run -e cuda predict-masks`.
+- For CUDA on Linux: `pixi install -e cuda` and `pixi run -e cuda satellit -- label by-bounding-boxes --help`.
 - `satellit -- label weak` writes per-tree weak-label crown bounding boxes (`bbox_x1,bbox_y1,bbox_x2,bbox_y2`) into `labels_tiles.csv` and `labels_tiles.shp`.
 - `satellit -- label by-bounding-boxes --weak-labels-csv <labels_tiles.csv>` consumes those stored tile-local bboxes as SAM box prompts.
 - Documentation site tasks (run from `docs/`):
-- `bun run gen:api` (generate API docs via Pixi task)
+- `bun install` (install docs dependencies)
+- `bun run gen:api` (generate API docs from `satellit_sam` source)
 - `bun run dev` (generate API docs, then run docmd dev server)
 - `bun run build` (generate API docs, then build static site)
-- GitHub Pages deployment workflow: `.github/workflows/docs-pages.yml` builds and deploys docs on pushes to `main` that touch `docs/**`, `scripts/generate_api_docs.py`, or `satellit_sam/src/satellit_sam/**`.
+- GitHub Pages deployment workflow: `.github/workflows/docs-pages.yml` builds and deploys docs on pushes to `main` that touch `docs/**`, `scripts/generate_api_docs.py`, `satellit_sam/src/satellit_sam/**`, or `.github/workflows/docs-pages.yml`.
 - If you add repeatable checks, document runnable commands here.
