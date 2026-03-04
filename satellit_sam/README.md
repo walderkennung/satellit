@@ -199,7 +199,7 @@ pixi run test
 
 | Environment | Platform     | Accelerator             |
 | ----------- | ------------ | ----------------------- |
-| `default`   | macOS, Linux | CPU                     |
+| `default`   | macOS, Linux | CPU (Linux) / MPS (Apple Silicon; unsupported ops use CPU fallback) |
 | `cuda`      | Linux        | NVIDIA GPU (CUDA 12.0+) |
 
 Run in CUDA environment:
