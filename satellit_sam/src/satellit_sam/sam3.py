@@ -17,6 +17,7 @@ from transformers import (
     Sam3Processor,
 )
 
+import satellit_sam.pytorch as pytorch_runtime
 from satellit_sam.core import Image
 from satellit_sam.plot import annotate, from_sam
 
@@ -25,6 +26,8 @@ SAM3_MODEL_ID = "facebook/sam3"
 SAM2_MODEL_ID = "facebook/sam2-hiera-large"
 DINOv3_MODEL_ID_DEFAULT = "tue-mps/eomt-dinov3-coco-panoptic-base-640"
 ModelVersion = Literal["sam3", "sam2", "dinov3"]
+_ORIGINAL_ROI_ALIGN = torchvision.ops.roi_align
+_ROI_ALIGN_MPS_FALLBACK_PATCHED = False
 
 
 class SamSingleton:
@@ -33,7 +36,9 @@ class SamSingleton:
     def __init__(self, model_name: ModelVersion = "sam3"):
         """Initialize model, processor, and device-specific settings."""
         self.model_name = model_name
-        if torch.cuda.is_available():
+        self.mps_roi_align_fallback_enabled = False
+        pytorch_instance = pytorch_runtime.init()
+        if pytorch_instance.cuda_available:
             torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
 
             if torch.cuda.get_device_properties(0).major >= 8:
@@ -42,7 +47,10 @@ class SamSingleton:
 
             self.device = "cuda"
         else:
-            self.device = "cpu"
+            self.device = pytorch_instance.device
+            if self.device == "mps" and self.model_name == "sam3":
+                self._enable_mps_roi_align_cpu_fallback()
+                self.mps_roi_align_fallback_enabled = True
 
         if self.model_name == "sam3":
             self.model = Sam3Model.from_pretrained(SAM3_MODEL_ID).to(self.device)
@@ -65,6 +73,70 @@ class SamSingleton:
         print("PyTorch version:", torch.__version__)
         print("Torchvision version:", torchvision.__version__)
         print("CUDA is available:", torch.cuda.is_available())
+        print("MPS is available:", torch.backends.mps.is_available())
+        print("Selected device:", self.device)
+        print("MPS roi_align CPU fallback enabled:", self.mps_roi_align_fallback_enabled)
+
+    @staticmethod
+    def _enable_mps_roi_align_cpu_fallback() -> None:
+        """Patch torchvision roi_align to fallback to CPU only on unsupported MPS calls."""
+        global _ROI_ALIGN_MPS_FALLBACK_PATCHED
+        if _ROI_ALIGN_MPS_FALLBACK_PATCHED:
+            return
+
+        def _roi_align_with_mps_fallback(
+            input: torch.Tensor,
+            boxes,
+            output_size,
+            spatial_scale: float = 1.0,
+            sampling_ratio: int = -1,
+            aligned: bool = False,
+        ):
+            try:
+                return _ORIGINAL_ROI_ALIGN(
+                    input=input,
+                    boxes=boxes,
+                    output_size=output_size,
+                    spatial_scale=spatial_scale,
+                    sampling_ratio=sampling_ratio,
+                    aligned=aligned,
+                )
+            except NotImplementedError as exc:
+                if input.device.type != "mps":
+                    raise
+                if "torchvision::roi_align" not in str(exc):
+                    raise
+
+                boxes_cpu = SamSingleton._move_roi_align_boxes_to_cpu(boxes=boxes)
+                output_cpu = _ORIGINAL_ROI_ALIGN(
+                    input=input.to("cpu"),
+                    boxes=boxes_cpu,
+                    output_size=output_size,
+                    spatial_scale=spatial_scale,
+                    sampling_ratio=sampling_ratio,
+                    aligned=aligned,
+                )
+                return output_cpu.to(input.device)
+
+        torchvision.ops.roi_align = _roi_align_with_mps_fallback
+        _ROI_ALIGN_MPS_FALLBACK_PATCHED = True
+
+    @staticmethod
+    def _move_roi_align_boxes_to_cpu(boxes):
+        """Move roi_align boxes to CPU preserving supported container shape."""
+        if torch.is_tensor(boxes):
+            return boxes.to("cpu")
+        if isinstance(boxes, tuple):
+            return tuple(
+                box.to("cpu") if torch.is_tensor(box) else torch.as_tensor(box)
+                for box in boxes
+            )
+        if isinstance(boxes, list):
+            return [
+                box.to("cpu") if torch.is_tensor(box) else torch.as_tensor(box)
+                for box in boxes
+            ]
+        raise TypeError(f"Unsupported roi_align boxes type: {type(boxes)!r}")
 
     def predict(
         self,

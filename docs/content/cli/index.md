@@ -19,6 +19,7 @@ No commands currently use positional arguments; all inputs are passed via option
 satellit
 ├── label
 │   ├── weak
+│   ├── validate-predictions
 │   └── by-bounding-boxes
 ├── predict
 │   └── image-masks
@@ -53,6 +54,7 @@ pixi run satellit -- label --help
 Subcommands:
 
 - `weak`
+- `validate-predictions`
 - `by-bounding-boxes`
 
 ## Command: `label weak`
@@ -116,6 +118,68 @@ pixi run satellit -- label weak \
   --export-visualizations
 ```
 
+## Command: `label validate-predictions`
+
+Usage:
+
+```bash
+pixi run satellit -- label validate-predictions --image-tif <PATH> [OPTIONS]
+```
+
+Description: Validate SAM3 strong-label masks against inventory stem positions from
+merged NPZ and/or per-tile NPZ artifacts.
+
+Validation rules:
+
+- Provide exactly one of `--inventory-csv` or `--inventory-shp`.
+- Provide at least one of `--predictions-npz` or `--predictions-tiles-dir`.
+- `--predictions-npz` must contain a `masks` array with shape `(N, H, W)`.
+- `--predictions-tiles-dir` can be partial/incomplete (for interrupted runs) and discovers `tile_x*_y*.npz` directly.
+- If both prediction sources are provided, merged NPZ is preferred.
+- `label_id` is the zero-based SAM3 mask index; once matched, labels are not reused.
+
+Options:
+
+| Option                  | Type                 | Required | Default                                  | Description                                                                  |
+| ----------------------- | -------------------- | -------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `--image-tif`           | file path            | yes      | -                                        | Orthophoto GeoTIFF used for coordinate projection.                           |
+| `--predictions-npz`     | file path            | no       | `None`                                   | Optional merged SAM3 prediction file (for example `masks/image_masks.npz`).  |
+| `--predictions-tiles-dir` | directory path     | no       | `None`                                   | Optional per-tile prediction NPZ directory (for example `masks/tiles`).      |
+| `--inventory-csv`       | file path            | no       | `None`                                   | Inventory CSV path (semicolon-delimited).                                    |
+| `--inventory-shp`       | file path            | no       | `None`                                   | Inventory ESRI Shapefile (`.shp`) path.                                      |
+| `--output-csv`          | path                 | no       | `output/validation/label_validation.csv` | Validation output CSV path.                                                  |
+| `--x-field`             | str                  | no       | `PX`                                     | Inventory x-coordinate field (CSV offset or SHP attribute).                  |
+| `--y-field`             | str                  | no       | `PY`                                     | Inventory y-coordinate field (CSV offset or SHP attribute).                  |
+| `--tree-id-field`       | str                  | no       | `TreeID`                                 | Inventory tree-id field name.                                                |
+| `--stem-id-field`       | str                  | no       | `StemTag`                                | Inventory stem-id field name; fallback chain is field -> `stemtag` -> tree id. |
+| `--species-field`       | str                  | no       | `Latin`                                  | Inventory species field name.                                                |
+| `--status-field`        | str                  | no       | `Status`                                 | Inventory status field name.                                                 |
+| `--status-filter`       | str                  | no       | `alive`                                  | Keep rows with this status (case-insensitive). Empty string disables filter. |
+| `--dbh-field`           | str                  | no       | `DBH`                                    | Inventory DBH field name.                                                    |
+| `--dbh-unit`            | enum (`mm`,`cm`,`m`) | no       | `mm`                                     | Unit for DBH values.                                                         |
+| `--min-dbh-cm`          | float                | no       | `0.0`                                    | Minimum DBH (cm) filter.                                                     |
+| `--max-dbh-cm`          | float                | no       | `0.0`                                    | Maximum DBH (cm) filter; `0` disables upper bound.                           |
+| `--deduplicate-tree-id` | flag                 | no       | `False`                                  | Keep only one row per tree id (highest DBH).                                 |
+| `--help`                | flag                 | no       | -                                        | Show help and exit.                                                          |
+
+Example:
+
+```bash
+pixi run satellit -- label validate-predictions \
+  --image-tif ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --predictions-npz output/predict/masks/image_masks.npz \
+  --inventory-shp ../data/Traunstein/inventory/processed/shifted_new_tree_positions_UTM33N.shp \
+  --output-csv output/validation/label_validation.csv
+```
+
+```bash
+pixi run satellit -- label validate-predictions \
+  --image-tif ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
+  --predictions-tiles-dir output/predict/masks/tiles \
+  --inventory-shp ../data/Traunstein/inventory/processed/shifted_new_tree_positions_UTM33N.shp \
+  --output-csv output/validation/label_validation.csv
+```
+
 ## Command: `label by-bounding-boxes`
 
 Usage:
@@ -125,6 +189,9 @@ pixi run satellit -- label by-bounding-boxes --image <PATH> [OPTIONS]
 ```
 
 Description: Generate label overlays from bounding-box prompts.
+
+Status: Deprecated. Use `predict image-masks --bbox ...` or
+`predict image-masks --weak-labels-csv ...` for canonical strong-label persistence.
 
 Options:
 
@@ -153,6 +220,11 @@ pixi run satellit -- label by-bounding-boxes \
   --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
   --weak-labels-csv output/inventory_from_shp/labels_tiles.csv
 ```
+
+Migration guidance:
+
+- Explicit prompts: `pixi run satellit -- predict image-masks --image <PATH> --bbox x1,y1,x2,y2`
+- Weak prompts: `pixi run satellit -- predict image-masks --image <PATH> --weak-labels-csv labels_tiles.csv`
 
 ## Command Group: `predict`
 
@@ -224,6 +296,13 @@ pixi run satellit -- predict image-masks \
   --image ../data/Traunstein/orthophoto_wgs84_utm33n_agg200mm.tif \
   --text "tree"
 ```
+
+Outputs under `--output-path`:
+
+- `image_masks_visualization.png`
+- `masks/image_masks.npz` with `masks`, `boxes`, `scores`, `image_size`, `source_tile_x`, `source_tile_y`
+- `masks/tiles/index.csv` with `tile_id,x0,y0,width,height,count`
+- `masks/tiles/tile_x{X}_y{Y}.npz` with `tile_id,tile_origin,tile_size,masks,boxes,scores`
 
 ## Command Group: `process`
 

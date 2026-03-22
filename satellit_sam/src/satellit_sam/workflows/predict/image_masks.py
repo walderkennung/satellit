@@ -1,5 +1,6 @@
 """Image-mask prediction workflow for streamed full-image segmentation inference."""
 
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Literal
@@ -18,6 +19,7 @@ from satellit_sam.prompts import (
     project_points_to_tile,
     tile_id_from_origin,
 )
+from satellit_sam.workflows.run_metadata import write_run_metadata
 
 gdal.UseExceptions()
 
@@ -42,6 +44,18 @@ class _TileCandidate:
     tile_origin: tuple[int, int]
 
 
+@dataclass
+class _TileArtifactIndexRow:
+    """One tile artifact manifest row."""
+
+    tile_id: str
+    x0: int
+    y0: int
+    width: int
+    height: int
+    count: int
+
+
 def predict_image_masks(
     image_path: Path,
     output_path: Path,
@@ -56,14 +70,16 @@ def predict_image_masks(
     weak_label_bboxes_by_tile: (
         dict[str, list[tuple[float, float, float, float]]] | None
     ) = None,
+    command: str | None = None,
 ) -> None:
     """Predict image masks from one image and save outputs.
 
     The workflow:
     1) streams model inference over image tiles,
     2) merges tile detections globally via NMS,
-    3) saves one mask visualization, and
-    4) saves predicted masks and metadata as one ``.npz`` file.
+    3) saves per-tile strong-label artifacts,
+    4) saves one mask visualization, and
+    5) saves merged predicted masks and metadata as one ``.npz`` file.
 
     Args:
         image_path: Path to the input image.
@@ -77,6 +93,7 @@ def predict_image_masks(
         tile_overlap: Overlap between neighboring prediction tiles in pixels.
         merge_iou_threshold: IoU threshold for cross-tile NMS merge.
         weak_label_bboxes_by_tile: Optional tile-local bboxes keyed by tile id.
+        command: Optional CLI command string used to start the run.
 
     Raises:
         ValueError: If inputs or prompt combinations are invalid.
@@ -115,6 +132,8 @@ def predict_image_masks(
     output_path.mkdir(parents=True, exist_ok=True)
     masks_dir = output_path / "masks"
     masks_dir.mkdir(parents=True, exist_ok=True)
+    mask_tiles_dir = masks_dir / "tiles"
+    mask_tiles_dir.mkdir(parents=True, exist_ok=True)
 
     sam = get_sam(model_name=model)
     sam.print_debug_info()
@@ -138,24 +157,55 @@ def predict_image_masks(
         )
 
     tile_candidates: list[_TileCandidate] = []
+    tile_index_rows: list[_TileArtifactIndexRow] = []
     for tile_input in tile_inputs:
         tile_origin = tile_input.origin
+        tile_id = tile_id_from_origin(tile_origin)
         tile_image = tile_input.image
+        tile_width, tile_height = tile_image.size
         tile_bbox_prompts = project_bboxes_to_tile(
             image_bboxes=bbox_prompts,
             tile_origin=tile_origin,
             tile_size=tile_image.size,
         )
         if weak_label_bboxes_by_tile:
-            tile_id = tile_id_from_origin(tile_origin)
             tile_bbox_prompts.extend(weak_label_bboxes_by_tile.get(tile_id, []))
         tile_point_prompts = project_points_to_tile(
             image_points=point_prompts,
             tile_origin=tile_origin,
             tile_size=tile_image.size,
         )
+        print(
+            "Processing tile "
+            f"{tile_id}: "
+            f"position=({tile_origin[0]}, {tile_origin[1]}), "
+            f"size=({tile_width}, {tile_height}), "
+            f"bboxes={_format_tile_bboxes(tile_bbox_prompts)}"
+        )
 
         if text_prompt is None and not tile_bbox_prompts and not tile_point_prompts:
+            empty_masks = np.empty((0, tile_height, tile_width), dtype=bool)
+            empty_boxes = np.empty((0, 4), dtype=np.float32)
+            empty_scores = np.empty((0,), dtype=np.float32)
+            _save_tile_masks_npz(
+                tile_masks_path=mask_tiles_dir / f"{tile_id}.npz",
+                tile_id=tile_id,
+                tile_origin=tile_origin,
+                tile_size=tile_image.size,
+                masks=empty_masks,
+                boxes=empty_boxes,
+                scores=empty_scores,
+            )
+            tile_index_rows.append(
+                _TileArtifactIndexRow(
+                    tile_id=tile_id,
+                    x0=tile_origin[0],
+                    y0=tile_origin[1],
+                    width=tile_width,
+                    height=tile_height,
+                    count=0,
+                )
+            )
             continue
 
         detections = sam.predict_detections(
@@ -167,20 +217,46 @@ def predict_image_masks(
             confidence_threshold=threshold,
             allow_low_confidence_fallback=True,
         )
+        local_boxes, local_scores, local_masks = _tile_detections_to_arrays(
+            detections=detections,
+            tile_size=tile_image.size,
+        )
+        _save_tile_masks_npz(
+            tile_masks_path=mask_tiles_dir / f"{tile_id}.npz",
+            tile_id=tile_id,
+            tile_origin=tile_origin,
+            tile_size=tile_image.size,
+            masks=local_masks,
+            boxes=local_boxes,
+            scores=local_scores,
+        )
+        tile_index_rows.append(
+            _TileArtifactIndexRow(
+                tile_id=tile_id,
+                x0=tile_origin[0],
+                y0=tile_origin[1],
+                width=tile_width,
+                height=tile_height,
+                count=int(local_boxes.shape[0]),
+            )
+        )
         tile_candidates.extend(
-            _tile_detections_to_candidates(
-                detections=detections,
+            _tile_arrays_to_candidates(
+                local_boxes=local_boxes,
+                local_scores=local_scores,
+                local_masks=local_masks,
                 tile_origin=tile_origin,
                 image_size=image_size,
-                tile_size=tile_image.size,
             )
         )
 
-    detections = _merge_tile_candidates(
+    detections, source_tile_x, source_tile_y = _merge_tile_candidates(
         candidates=tile_candidates,
         image_size=image_size,
         merge_iou_threshold=merge_iou_threshold,
     )
+    tile_index_path = mask_tiles_dir / "index.csv"
+    _write_tile_index(index_path=tile_index_path, rows=tile_index_rows)
 
     if source_image is None:
         print(f"Loading image from: {image_path}")
@@ -206,12 +282,35 @@ def predict_image_masks(
         masks=detections.mask,
         boxes=detections.xyxy,
         scores=detections.confidence,
+        source_tile_x=source_tile_x,
+        source_tile_y=source_tile_y,
+    )
+    metadata_path = write_run_metadata(
+        output_dir=output_path,
+        image_path=image_path,
+        tile_size=tile_size,
+        tile_overlap=tile_overlap,
+        prompt={
+            "text": text_prompt,
+            "bbox_prompts": [list(prompt) for prompt in bbox_prompts],
+            "point_prompts": [list(prompt) for prompt in point_prompts],
+            "weak_label_prompt_count": (
+                sum(len(prompts) for prompts in weak_label_bboxes_by_tile.values())
+                if weak_label_bboxes_by_tile
+                else 0
+            ),
+        },
+        model=model,
+        command=command,
     )
 
+    print(f"Finished tile processing. Total masks found: {len(detections)}")
     print("✓ Mask prediction complete.")
     _print_prediction_summary(detections=detections)
     print(f"Visualization saved to: {visualization_path}")
     print(f"Predicted masks saved to: {masks_path}")
+    print(f"Per-tile masks saved under: {mask_tiles_dir}")
+    print(f"Run metadata saved to: {metadata_path}")
 
 
 def _iter_in_memory_tile_inputs(
@@ -276,33 +375,67 @@ def _iter_geotiff_tile_inputs(
         dataset = None
 
 
-def _tile_detections_to_candidates(
+def _tile_detections_to_arrays(
     detections: sv.Detections,
-    tile_origin: tuple[int, int],
-    image_size: tuple[int, int],
     tile_size: tuple[int, int],
-) -> list[_TileCandidate]:
-    """Convert one tile's detections into global candidate objects."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Normalize one tile's detections into ``(boxes, scores, masks)`` arrays."""
+    tile_width, tile_height = tile_size
     if len(detections) == 0:
-        return []
+        return (
+            np.empty((0, 4), dtype=np.float32),
+            np.empty((0,), dtype=np.float32),
+            np.empty((0, tile_height, tile_width), dtype=bool),
+        )
 
     boxes = detections.xyxy
     if boxes is None:
-        return []
+        return (
+            np.empty((0, 4), dtype=np.float32),
+            np.empty((0,), dtype=np.float32),
+            np.empty((0, tile_height, tile_width), dtype=bool),
+        )
     boxes = np.asarray(boxes, dtype=np.float32)
 
     if detections.confidence is None:
         confidences = np.ones((len(boxes),), dtype=np.float32)
     else:
-        confidences = np.asarray(detections.confidence, dtype=np.float32)
+        confidences = np.asarray(detections.confidence, dtype=np.float32).reshape(-1)
 
     if detections.mask is None:
         tile_masks = _boxes_to_tile_masks(boxes=boxes, tile_size=tile_size)
     else:
         tile_masks = np.asarray(detections.mask, dtype=bool)
 
+    effective_count = min(len(boxes), len(confidences), len(tile_masks))
+    if effective_count == 0:
+        return (
+            np.empty((0, 4), dtype=np.float32),
+            np.empty((0,), dtype=np.float32),
+            np.empty((0, tile_height, tile_width), dtype=bool),
+        )
+
+    normalized_masks: list[np.ndarray] = []
+    for idx in range(effective_count):
+        normalized_masks.append(_normalize_tile_mask(tile_masks[idx], tile_size=tile_size))
+
+    return (
+        boxes[:effective_count].astype(np.float32, copy=False),
+        confidences[:effective_count].astype(np.float32, copy=False),
+        np.asarray(normalized_masks, dtype=bool),
+    )
+
+
+def _tile_arrays_to_candidates(
+    local_boxes: np.ndarray,
+    local_scores: np.ndarray,
+    local_masks: np.ndarray,
+    tile_origin: tuple[int, int],
+    image_size: tuple[int, int],
+) -> list[_TileCandidate]:
+    """Convert one tile's normalized arrays into global candidate objects."""
     candidates: list[_TileCandidate] = []
-    for idx, local_box in enumerate(boxes):
+    for idx, local_box in enumerate(local_boxes):
         global_box = _local_box_to_global(
             local_box=local_box,
             tile_origin=tile_origin,
@@ -310,12 +443,11 @@ def _tile_detections_to_candidates(
         )
         if global_box is None:
             continue
-        tile_mask = _normalize_tile_mask(tile_masks[idx], tile_size=tile_size)
         candidates.append(
             _TileCandidate(
                 global_box=global_box,
-                score=float(confidences[idx]),
-                tile_mask=tile_mask,
+                score=float(local_scores[idx]),
+                tile_mask=np.asarray(local_masks[idx], dtype=bool),
                 tile_origin=tile_origin,
             )
         )
@@ -326,10 +458,14 @@ def _merge_tile_candidates(
     candidates: list[_TileCandidate],
     image_size: tuple[int, int],
     merge_iou_threshold: float,
-) -> sv.Detections:
+) -> tuple[sv.Detections, np.ndarray, np.ndarray]:
     """Merge cross-tile candidates with global box NMS."""
     if not candidates:
-        return sv.Detections.empty()
+        return (
+            sv.Detections.empty(),
+            np.empty((0,), dtype=np.int32),
+            np.empty((0,), dtype=np.int32),
+        )
 
     boxes = np.asarray([candidate.global_box for candidate in candidates], dtype=np.float32)
     scores = np.asarray([candidate.score for candidate in candidates], dtype=np.float32)
@@ -339,12 +475,18 @@ def _merge_tile_candidates(
         iou_threshold=merge_iou_threshold,
     )
     if kept_indices.numel() == 0:
-        return sv.Detections.empty()
+        return (
+            sv.Detections.empty(),
+            np.empty((0,), dtype=np.int32),
+            np.empty((0,), dtype=np.int32),
+        )
 
     image_width, image_height = image_size
     kept_boxes: list[tuple[float, float, float, float]] = []
     kept_scores: list[float] = []
     kept_masks: list[np.ndarray] = []
+    kept_source_tile_x: list[int] = []
+    kept_source_tile_y: list[int] = []
     for index in kept_indices.tolist():
         candidate = candidates[int(index)]
         tile_mask = candidate.tile_mask
@@ -362,14 +504,24 @@ def _merge_tile_candidates(
         kept_boxes.append(candidate.global_box)
         kept_scores.append(candidate.score)
         kept_masks.append(full_mask)
+        kept_source_tile_x.append(tile_x)
+        kept_source_tile_y.append(tile_y)
 
     if not kept_masks:
-        return sv.Detections.empty()
+        return (
+            sv.Detections.empty(),
+            np.empty((0,), dtype=np.int32),
+            np.empty((0,), dtype=np.int32),
+        )
 
-    return sv.Detections(
-        xyxy=np.asarray(kept_boxes, dtype=np.float32),
-        confidence=np.asarray(kept_scores, dtype=np.float32),
-        mask=np.asarray(kept_masks, dtype=bool),
+    return (
+        sv.Detections(
+            xyxy=np.asarray(kept_boxes, dtype=np.float32),
+            confidence=np.asarray(kept_scores, dtype=np.float32),
+            mask=np.asarray(kept_masks, dtype=bool),
+        ),
+        np.asarray(kept_source_tile_x, dtype=np.int32),
+        np.asarray(kept_source_tile_y, dtype=np.int32),
     )
 
 
@@ -498,12 +650,15 @@ def _save_masks(
     masks: np.ndarray | None = None,
     boxes: np.ndarray | None = None,
     scores: np.ndarray | None = None,
+    source_tile_x: np.ndarray | None = None,
+    source_tile_y: np.ndarray | None = None,
 ) -> None:
-    """Save model outputs as one compressed ``.npz`` file."""
+    """Save merged model outputs as one compressed ``.npz`` file."""
     image_width, image_height = image_size
     empty_masks = np.empty((0, image_height, image_width), dtype=np.uint8)
     empty_boxes = np.empty((0, 4), dtype=np.float32)
     empty_scores = np.empty((0,), dtype=np.float32)
+    empty_source = np.empty((0,), dtype=np.int32)
 
     np.savez_compressed(
         masks_path,
@@ -511,7 +666,78 @@ def _save_masks(
         boxes=np.asarray(boxes) if boxes is not None else empty_boxes,
         scores=np.asarray(scores) if scores is not None else empty_scores,
         image_size=np.asarray([image_width, image_height], dtype=np.int32),
+        source_tile_x=(
+            np.asarray(source_tile_x, dtype=np.int32)
+            if source_tile_x is not None
+            else empty_source
+        ),
+        source_tile_y=(
+            np.asarray(source_tile_y, dtype=np.int32)
+            if source_tile_y is not None
+            else empty_source
+        ),
     )
+
+
+def _save_tile_masks_npz(
+    tile_masks_path: Path,
+    tile_id: str,
+    tile_origin: tuple[int, int],
+    tile_size: tuple[int, int],
+    masks: np.ndarray,
+    boxes: np.ndarray,
+    scores: np.ndarray,
+) -> None:
+    """Save one tile's strong-label detections as compressed NPZ."""
+    tile_width, tile_height = tile_size
+    np.savez_compressed(
+        tile_masks_path,
+        tile_id=np.asarray(tile_id),
+        tile_origin=np.asarray([tile_origin[0], tile_origin[1]], dtype=np.int32),
+        tile_size=np.asarray([tile_width, tile_height], dtype=np.int32),
+        masks=np.asarray(masks, dtype=bool),
+        boxes=np.asarray(boxes, dtype=np.float32),
+        scores=np.asarray(scores, dtype=np.float32),
+    )
+
+
+def _format_tile_bboxes(
+    tile_bboxes: list[tuple[float, float, float, float]],
+) -> str:
+    """Format tile-local bbox prompts as ``position`` and ``size`` tuples."""
+    if not tile_bboxes:
+        return "none"
+
+    formatted_bboxes: list[str] = []
+    for idx, bbox in enumerate(tile_bboxes, start=1):
+        x1, y1, x2, y2 = [float(value) for value in bbox]
+        width = max(0.0, x2 - x1)
+        height = max(0.0, y2 - y1)
+        formatted_bboxes.append(
+            f"{idx}: pos=({x1:.1f}, {y1:.1f}), size=({width:.1f}, {height:.1f})"
+        )
+    return "[" + "; ".join(formatted_bboxes) + "]"
+
+
+def _write_tile_index(
+    index_path: Path,
+    rows: list[_TileArtifactIndexRow],
+) -> None:
+    """Write tile-artifact manifest rows as CSV."""
+    with index_path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["tile_id", "x0", "y0", "width", "height", "count"])
+        for row in rows:
+            writer.writerow(
+                [
+                    row.tile_id,
+                    row.x0,
+                    row.y0,
+                    row.width,
+                    row.height,
+                    row.count,
+                ]
+            )
 
 
 def _print_prediction_summary(detections: sv.Detections) -> None:

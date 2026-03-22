@@ -47,6 +47,8 @@ def test_predict_image_masks_cli_accepts_dinov3_with_text(
     assert captured["text_prompt"] == "tree"
     assert captured["bbox_prompts"] == []
     assert captured["point_prompts"] == []
+    assert isinstance(captured["command"], str)
+    assert captured["command"] != ""
 
 
 @pytest.mark.unit
@@ -117,6 +119,8 @@ def test_predict_image_masks_cli_passes_tiling_options(
     assert captured["tile_size"] == 512
     assert captured["tile_overlap"] == 32
     assert captured["merge_iou_threshold"] == 0.3
+    assert isinstance(captured["command"], str)
+    assert captured["command"] != ""
 
 
 @pytest.mark.unit

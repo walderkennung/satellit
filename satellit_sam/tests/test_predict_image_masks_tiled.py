@@ -1,5 +1,7 @@
 """Tests for streamed tiled image-mask prediction workflow."""
 
+import csv
+import json
 from pathlib import Path
 
 import numpy as np
@@ -95,12 +97,21 @@ def test_predict_image_masks_tiled_merges_overlapping_bbox_candidates(
     results = np.load(output_path / "masks" / "image_masks.npz")
     assert int(results["boxes"].shape[0]) == 1
     assert int(results["masks"].shape[0]) == 1
+    assert int(results["source_tile_x"].shape[0]) == 1
+    assert int(results["source_tile_y"].shape[0]) == 1
     np.testing.assert_allclose(
         results["boxes"][0],
         np.asarray([40.0, 40.0, 50.0, 50.0], dtype=np.float32),
         rtol=0.0,
         atol=1.0,
     )
+    possible_origins = {(0, 0), (32, 0), (0, 32), (32, 32)}
+    assert (int(results["source_tile_x"][0]), int(results["source_tile_y"][0])) in possible_origins
+
+    tiles_dir = output_path / "masks" / "tiles"
+    assert (tiles_dir / "index.csv").exists()
+    tile_npz_files = sorted(tiles_dir.glob("tile_x*_y*.npz"))
+    assert len(tile_npz_files) == 9
 
 
 @pytest.mark.unit
@@ -227,6 +238,107 @@ def test_predict_image_masks_tiled_writes_empty_npz_for_no_detections(
     assert int(results["masks"].shape[0]) == 0
     assert int(results["boxes"].shape[0]) == 0
     assert int(results["scores"].shape[0]) == 0
+    assert int(results["source_tile_x"].shape[0]) == 0
+    assert int(results["source_tile_y"].shape[0]) == 0
+
+    index_csv = output_path / "masks" / "tiles" / "index.csv"
+    assert index_csv.exists()
+    with index_csv.open("r", encoding="utf-8", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert len(rows) == 16
+    assert all(int(row["count"]) == 0 for row in rows)
+
+
+@pytest.mark.unit
+def test_predict_image_masks_tiled_writes_per_tile_npz_schema(
+    temp_dir,
+    monkeypatch,
+):
+    """Per-tile NPZ artifacts should include canonical schema and local detections."""
+    image_path = temp_dir / "source.png"
+    output_path = temp_dir / "predict_out"
+    source_data = np.zeros((32, 32, 3), dtype=np.uint8)
+    Image(size=(32, 32), channels=3, data=source_data).save(str(image_path))
+
+    def _predict_impl(image: Image, boxes=None, **_kwargs):
+        tile_width, tile_height = image.size
+        mask = np.zeros((tile_height, tile_width), dtype=bool)
+        mask[4:12, 6:14] = True
+        return sv.Detections(
+            xyxy=np.asarray([[6.0, 4.0, 14.0, 12.0]], dtype=np.float32),
+            confidence=np.asarray([0.95], dtype=np.float32),
+            mask=np.asarray([mask], dtype=bool),
+        )
+
+    monkeypatch.setattr(
+        "satellit_sam.sam3.get_sam",
+        lambda model_name="sam3": _DummySam(_predict_impl),
+    )
+    monkeypatch.setattr(
+        image_masks_workflow, "annotate", lambda image, detections, label=None: image
+    )
+
+    image_masks_workflow.predict_image_masks(
+        image_path=image_path,
+        output_path=output_path,
+        text_prompt="tree",
+        bbox_prompts=[],
+        point_prompts=[],
+        model="sam3",
+        threshold=0.0,
+        tile_size=32,
+        tile_overlap=0,
+        merge_iou_threshold=0.5,
+        weak_label_bboxes_by_tile=None,
+    )
+
+    tile_npz = output_path / "masks" / "tiles" / "tile_x0_y0.npz"
+    assert tile_npz.exists()
+    with np.load(tile_npz, allow_pickle=False) as tile_data:
+        assert set(tile_data.files) == {
+            "tile_id",
+            "tile_origin",
+            "tile_size",
+            "masks",
+            "boxes",
+            "scores",
+        }
+        assert str(tile_data["tile_id"]) == "tile_x0_y0"
+        np.testing.assert_array_equal(
+            tile_data["tile_origin"],
+            np.asarray([0, 0], dtype=np.int32),
+        )
+        np.testing.assert_array_equal(
+            tile_data["tile_size"],
+            np.asarray([32, 32], dtype=np.int32),
+        )
+        assert tile_data["masks"].shape == (1, 32, 32)
+        assert tile_data["masks"].dtype == np.bool_
+        assert tile_data["boxes"].shape == (1, 4)
+        assert tile_data["boxes"].dtype == np.float32
+        assert tile_data["scores"].shape == (1,)
+        assert tile_data["scores"].dtype == np.float32
+
+    index_csv = output_path / "masks" / "tiles" / "index.csv"
+    with index_csv.open("r", encoding="utf-8", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert len(rows) == 1
+    assert rows[0]["tile_id"] == "tile_x0_y0"
+    assert int(rows[0]["count"]) == 1
+
+    metadata_path = output_path / "metadata.json"
+    assert metadata_path.exists()
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["tile"] == {"size": 32, "overlap": 0}
+    assert metadata["image_path"] == str(image_path.resolve())
+    assert metadata["model"] == "sam3"
+    assert metadata["command"] is None
+    assert metadata["prompt"] == {
+        "text": "tree",
+        "bbox_prompts": [],
+        "point_prompts": [],
+        "weak_label_prompt_count": 0,
+    }
 
 
 @pytest.mark.unit

@@ -23,7 +23,8 @@ pixi run satellit -- --help
 Main command groups:
 
 - `label weak`
-- `label by-bounding-boxes`
+- `label validate-predictions`
+- `label by-bounding-boxes` (deprecated)
 
 Detailed CLI docs:
 

@@ -46,6 +46,7 @@ class Inventory:
         min_dbh_cm: float = 0.0,
         max_dbh_cm: float = math.inf,
         tree_id_field="",
+        stem_id_field="",
         species_field="",
         deduplicate_tree_id=True,
     ) -> None:
@@ -64,6 +65,7 @@ class Inventory:
             min_dbh_cm: Minimum DBH threshold in centimeters.
             max_dbh_cm: Maximum DBH threshold in centimeters (<=0 disables upper bound).
             tree_id_field: Column name for tree identifier values.
+            stem_id_field: Column name for stem identifier values.
             species_field: Column name for species values.
             deduplicate_tree_id: Whether to deduplicate by tree id after loading.
         """
@@ -92,6 +94,9 @@ class Inventory:
                     continue
 
                 tree_id = (row.get(tree_id_field) or "").strip()
+                stem_id = (row.get(stem_id_field) or "").strip()
+                if not stem_id:
+                    stem_id = (row.get("stemtag") or "").strip()
                 species = (row.get(species_field) or "").strip()
                 dbh_cm = to_dbh_cm(dbh_raw=dbh_raw, dbh_unit=dbh_unit)
                 if dbh_cm < min_dbh_cm:
@@ -107,6 +112,7 @@ class Inventory:
                 self.trees.append(
                     Tree(
                         tree_id=tree_id,
+                        stem_id=stem_id or None,
                         species=species,
                         status=status,
                         x_wgs84=x_wgs84,
@@ -128,6 +134,7 @@ class Inventory:
         min_dbh_cm: float = 0.0,
         max_dbh_cm: float = math.inf,
         tree_id_field="",
+        stem_id_field="",
         species_field="",
         deduplicate_tree_id=True,
     ) -> None:
@@ -145,6 +152,7 @@ class Inventory:
             min_dbh_cm: Minimum DBH threshold in centimeters.
             max_dbh_cm: Maximum DBH threshold in centimeters (<=0 disables upper bound).
             tree_id_field: Field name for tree identifier values.
+            stem_id_field: Field name for stem identifier values.
             species_field: Field name for species values.
             deduplicate_tree_id: Whether to deduplicate by tree id after loading.
 
@@ -197,6 +205,7 @@ class Inventory:
                 ).strip()
                 if not tree_id:
                     tree_id = f"shp_{idx}"
+                stem_id = _get_first_present(row, [stem_id_field, "stemtag"]).strip()
                 species = _get_first_present(
                     row, [species_field, "species", "latin"]
                 ).strip()
@@ -224,6 +233,7 @@ class Inventory:
                 self.trees.append(
                     Tree(
                         tree_id=tree_id,
+                        stem_id=stem_id or None,
                         species=species,
                         status=status,
                         x_wgs84=x,
